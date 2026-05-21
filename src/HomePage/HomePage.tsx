@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ResponsiveLine } from '@nivo/line'
 import { ResponsivePie } from '@nivo/pie'
 import { ResponsiveAreaBump } from '@nivo/bump'
@@ -8,11 +8,6 @@ type EnergyPoint = {
   accumulated: number
 }
 
-type EnergyIntervalPoint = {
-  start: Date
-  end: Date
-  consumption: number
-}
 
 export default function EnergyDashboardHomepage() {
   const generateEnergyData = (): EnergyPoint[] => {
@@ -43,6 +38,64 @@ export default function EnergyDashboardHomepage() {
 
     return data
   }
+
+  function normalizeTo24Intervals(data: EnergyPoint[]): EnergyPoint[] {
+    if (data.length <= 25) {
+      return data
+    }
+
+    const result: EnergyPoint[] = []
+
+    const startTime = data[0].timestamp.getTime()
+    const endTime = data[data.length - 1].timestamp.getTime()
+
+    const intervalDuration = (endTime - startTime) / 24
+
+    result.push({
+      timestamp: new Date(startTime),
+      accumulated: data[0].accumulated,
+    })
+
+    let syntheticAccumulated = data[0].accumulated
+
+    for (let i = 0; i < 24; i++) {
+      const intervalStart = startTime + i * intervalDuration
+      const intervalEnd = startTime + (i + 1) * intervalDuration
+
+      const pointsInInterval = data.filter(
+        item =>
+          item.timestamp.getTime() >= intervalStart &&
+          item.timestamp.getTime() <= intervalEnd
+      )
+
+      let averageConsumption = 0
+
+      if (pointsInInterval.length > 1) {
+        const first = pointsInInterval[0]
+        const last = pointsInInterval[pointsInInterval.length - 1]
+
+        const consumption =
+          last.accumulated - first.accumulated
+
+        const hours =
+          (last.timestamp.getTime() - first.timestamp.getTime()) /
+          (1000 * 60 * 60)
+
+        averageConsumption = hours > 0 ? consumption / hours : 0
+      }
+
+      syntheticAccumulated += averageConsumption * (intervalDuration / (1000 * 60 * 60))
+
+      result.push({
+        timestamp: new Date(intervalEnd),
+        accumulated: syntheticAccumulated,
+      })
+    }
+
+    return result
+  }
+
+  const chartContainerRef = useRef<HTMLDivElement | null>(null)
 
   const energyData = useMemo(() => generateEnergyData(), [])
 
@@ -78,64 +131,12 @@ export default function EnergyDashboardHomepage() {
 
   const [activeSliceIndex, setActiveSliceIndex] = useState<number | null>(null)
 
-  function normalizeDataPoints(
-    data: EnergyIntervalPoint[],
-    targetPoints: number
-  ) {
-    if (data.length <= targetPoints) {
-      return data
-    }
+  const [tooltip, setTooltip] = useState<{
+    x: number
+    y: number
+    point: any
+  } | null>(null)
 
-    const bucketSize = Math.floor(
-      data.length / targetPoints
-    )
-
-    const normalized: EnergyIntervalPoint[] = []
-
-    for (let i = 0; i < targetPoints; i++) {
-      const start = i * bucketSize
-      const end = start + bucketSize
-
-      const bucket = data.slice(start, end)
-
-      if (bucket.length === 0) continue
-
-      const avg =
-        bucket.reduce(
-          (acc, item) => acc + item.consumption,
-          0
-        ) / bucket.length
-
-      normalized.push({
-        start: bucket[0].start,
-        end: bucket[bucket.length - 1].end,
-        consumption: Number(avg.toFixed(2)),
-      })
-    }
-
-    return normalized
-  }
-
-  function buildIntervals(
-    data: EnergyPoint[]
-  ): EnergyIntervalPoint[] {
-    const intervals: EnergyIntervalPoint[] = []
-
-    for (let i = 1; i < data.length; i++) {
-      const previous = data[i - 1]
-      const current = data[i]
-
-      intervals.push({
-        start: previous.timestamp,
-        end: current.timestamp,
-        consumption:
-          current.accumulated -
-          previous.accumulated,
-      })
-    }
-
-    return intervals
-  }
 
   const filteredData = useMemo(() => {
     const now = new Date()
@@ -197,9 +198,7 @@ export default function EnergyDashboardHomepage() {
       )
     }
 
-    const intervals = buildIntervals(filtered)
-
-    return normalizeDataPoints(intervals, 24)
+    return normalizeTo24Intervals(filtered)
   }, [
     selectedRange,
     energyData,
@@ -212,44 +211,69 @@ export default function EnergyDashboardHomepage() {
       {
         id: 'Energia',
         data: filteredData.map((item, index) => {
+          const next = filteredData[index + 1]
+          const previous = filteredData[index - 1]
+
           const startLabel =
-            item.start.toLocaleDateString('pt-PT', {
+            item.timestamp.toLocaleDateString('pt-PT', {
               day: '2-digit',
               month: '2-digit',
             }) +
             ' ' +
-            item.start.toLocaleTimeString('pt-PT', {
+            item.timestamp.toLocaleTimeString('pt-PT', {
               hour: '2-digit',
               minute: '2-digit',
             })
 
-          const endLabel =
-            item.end.toLocaleDateString('pt-PT', {
-              day: '2-digit',
-              month: '2-digit',
-            }) +
-            ' ' +
-            item.end.toLocaleTimeString('pt-PT', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
+          const endLabel = next
+            ? next.timestamp.toLocaleDateString('pt-PT', {
+                day: '2-digit',
+                month: '2-digit',
+              }) +
+              ' ' +
+              next.timestamp.toLocaleTimeString('pt-PT', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : startLabel
+
+          let y = 0
+
+          if (next) {
+            y = Number(
+              (
+                (next.accumulated - item.accumulated) /
+                ((next.timestamp.getTime() - item.timestamp.getTime()) /
+                  (1000 * 60 * 60))
+              ).toFixed(1)
+            )
+          } else if (previous) {
+            y = Number(
+              (
+                (item.accumulated - previous.accumulated) /
+                ((item.timestamp.getTime() - previous.timestamp.getTime()) /
+                  (1000 * 60 * 60))
+              ).toFixed(1)
+            )
+          }
 
           return {
             x: `${index}`,
+
             label:
               selectedRange === '24h'
-                ? item.start.toLocaleTimeString('pt-PT', {
+                ? item.timestamp.toLocaleTimeString('pt-PT', {
                     hour: '2-digit',
                     minute: '2-digit',
                   })
-                : item.start.toLocaleDateString('pt-PT', {
+                : item.timestamp.toLocaleDateString('pt-PT', {
                     day: '2-digit',
                     month: '2-digit',
                   }),
 
             intervalLabel: `${startLabel} → ${endLabel}`,
 
-            y: item.consumption,
+            y,
           }
         }),
       },
@@ -561,10 +585,69 @@ export default function EnergyDashboardHomepage() {
     },
   }
 
+  const IntervalHoverLayer = ({
+    innerHeight,
+    xScale,
+  }: any) => {
+    const points = currentChartData[0].data
+
+    return (
+      <g>
+        {points.slice(0, -1).map((point, index) => {
+          const currentX = xScale(point.x)
+
+          let width = 0
+
+          if (index < points.length - 1) {
+            const nextX = xScale(points[index + 1].x)
+
+            width = nextX - currentX
+          } else {
+            const previousX =
+              xScale(points[index - 1].x)
+
+            width = currentX - previousX
+          }
+
+          return (
+            <rect
+              key={point.x}
+              x={currentX}
+              y={0}
+              width={width}
+              height={innerHeight}
+              fill="transparent"
+              style={{ cursor: 'pointer' }}
+              onMouseMove={event => {
+                if (!chartContainerRef.current) return
+
+                const rect =
+                  chartContainerRef.current.getBoundingClientRect()
+
+                setActiveSliceIndex(index)
+
+                setTooltip({
+                  x: event.clientX - rect.left,
+                  y: event.clientY - rect.top,
+                  point,
+                })
+              }}
+              onMouseLeave={() => {
+                setActiveSliceIndex(null)
+                setTooltip(null)
+              }}
+            />
+          )
+        })}
+      </g>
+    )
+  }
+
   const IntervalHighlightLayer = ({
     innerHeight,
     xScale,
   }: any) => {
+    
     if (activeSliceIndex === null) return null
 
     const points = currentChartData[0].data
@@ -575,13 +658,21 @@ export default function EnergyDashboardHomepage() {
 
     const currentX = xScale(current.x)
 
-    const nextPoint = points[activeSliceIndex + 1]
+    let width = 0
 
-    if (!nextPoint) return null
+    if (activeSliceIndex < points.length - 1) {
+      const nextPoint =
+        points[activeSliceIndex + 1]
 
-    const nextX = xScale(nextPoint.x)
+      const nextX = xScale(nextPoint.x)
 
-    const width = nextX - currentX
+      width = nextX - currentX
+    } else {
+      const previousX =
+        xScale(points[activeSliceIndex - 1].x)
+
+      width = currentX - previousX
+    }
 
     return (
       <g>
@@ -590,13 +681,19 @@ export default function EnergyDashboardHomepage() {
           y={0}
           width={width}
           height={innerHeight}
-          fill="rgba(59,130,246,0.18)"
-          stroke="rgba(59,130,246,0.45)"
+          fill="rgba(255,255,255,0.08)"
+          stroke="rgba(255,255,255,0.22)"
           strokeWidth={1.5}
         />
       </g>
     )
   }
+
+  const maxY = Math.max(
+    ...currentChartData[0].data
+      .slice(0, -1)
+      .map(point => point.y)
+  )
 
   return (
     <div className="min-h-screen bg-[#020617] text-white overflow-x-hidden overflow-y-visible">
@@ -752,7 +849,7 @@ export default function EnergyDashboardHomepage() {
               </>
             )}
 
-            <div className="h-[340px] relative overflow-visible z-50">
+            <div ref={chartContainerRef} className="h-[340px] relative overflow-visible z-50">
               <ResponsiveLine
                 layers={[
                   'grid',
@@ -762,12 +859,11 @@ export default function EnergyDashboardHomepage() {
                   IntervalHighlightLayer,
                   'lines',
                   'points',
-                  'slices',
-                  'mesh',
+                  IntervalHoverLayer,
                   'legends',
                 ]}
                 data={currentChartData}
-                enableSlices="x"
+                isInteractive={false}
                 enableGridX={true}
                 enableGridY={true}
                 gridXValues={12}
@@ -784,7 +880,7 @@ export default function EnergyDashboardHomepage() {
                 yScale={{
                   type: 'linear',
                   min: 0,
-                  max: 50,
+                  max: Math.ceil(maxY * 1.2),
                   stacked: false,
                 }}
                 axisBottom={{
@@ -807,11 +903,11 @@ export default function EnergyDashboardHomepage() {
                   legendPosition: 'middle',
                 }}
                 axisLeft={{
-                  legend: 'kWh',
+                  legend: 'kWh/h',
                   legendOffset: -45,
                   legendPosition: 'middle',
                 }}
-                curve="monotoneX"
+                curve="stepAfter"
                 enableArea
                 areaOpacity={0.15}
                 enablePoints={true}
@@ -822,44 +918,39 @@ export default function EnergyDashboardHomepage() {
                 motionConfig="gentle"
                 colors={['#3b82f6']}
                 onMouseLeave={() => setActiveSliceIndex(null)}
-                sliceTooltip={({ slice }) => {
-                  const point = slice.points[0]
-
-                  const pointIndex =
-                    currentChartData[0].data.findIndex(
-                      item => item.x === point.data.x
-                    )
-
-                  if (activeSliceIndex !== pointIndex) {
-                    setActiveSliceIndex(pointIndex)
-                  }
-
-                  return (
-                    <div className="rounded-xl bg-slate-950/95 backdrop-blur-xl px-4 py-3 shadow-2xl border border-white/10 min-w-[260px]">
-
-                      <div className="text-xs text-slate-400 mb-2">
-                        Intervalo
-                      </div>
-
-                      <div className="text-white font-medium leading-relaxed">
-                        {point.data.intervalLabel as string}
-                      </div>
-
-                      <div className="h-px bg-white/10 my-3" />
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">
-                          Consumo médio
-                        </span>
-
-                        <span className="text-blue-300 font-bold text-lg">
-                          {point.data.yFormatted} kWh
-                        </span>
-                      </div>
-                    </div>
-                  )
-                }}
               />
+              {tooltip && (
+                <div
+                  className="absolute z-[9999] pointer-events-none"
+                  style={{
+                    left: tooltip.x + 16,
+                    top: tooltip.y - 20,
+                  }}
+                >
+                  <div className="rounded-xl bg-slate-950/95 backdrop-blur-xl px-4 py-3 shadow-2xl border border-white/10 min-w-[260px]">
+
+                    <div className="text-xs text-slate-400 mb-2">
+                      Intervalo
+                    </div>
+
+                    <div className="text-white font-medium leading-relaxed">
+                      {tooltip.point.intervalLabel}
+                    </div>
+
+                    <div className="h-px bg-white/10 my-3" />
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">
+                        Consumo médio
+                      </span>
+
+                      <span className="text-blue-300 font-bold text-lg">
+                        {tooltip.point.y} kWh
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
