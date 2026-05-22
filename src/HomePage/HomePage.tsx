@@ -596,18 +596,8 @@ export default function EnergyDashboardHomepage() {
         {points.slice(0, -1).map((point, index) => {
           const currentX = xScale(point.x)
 
-          let width = 0
-
-          if (index < points.length - 1) {
-            const nextX = xScale(points[index + 1].x)
-
-            width = nextX - currentX
-          } else {
-            const previousX =
-              xScale(points[index - 1].x)
-
-            width = currentX - previousX
-          }
+          const nextX = xScale(points[index + 1].x)
+          const width = nextX - currentX
 
           return (
             <rect
@@ -658,21 +648,12 @@ export default function EnergyDashboardHomepage() {
 
     const currentX = xScale(current.x)
 
-    let width = 0
+    const nextPoint = points[activeSliceIndex + 1]
 
-    if (activeSliceIndex < points.length - 1) {
-      const nextPoint =
-        points[activeSliceIndex + 1]
+    if (!nextPoint) return null
 
-      const nextX = xScale(nextPoint.x)
-
-      width = nextX - currentX
-    } else {
-      const previousX =
-        xScale(points[activeSliceIndex - 1].x)
-
-      width = currentX - previousX
-    }
+    const nextX = xScale(nextPoint.x)
+    const width = nextX - currentX
 
     return (
       <g>
@@ -689,11 +670,11 @@ export default function EnergyDashboardHomepage() {
     )
   }
 
-  const maxY = Math.max(
-    ...currentChartData[0].data
-      .slice(0, -1)
-      .map(point => point.y)
-  )
+  const yValues = currentChartData[0].data
+    .slice(0, -1)
+    .map(point => point.y)
+
+  const maxY = yValues.length > 0 ? Math.max(...yValues) : 0
 
   return (
     <div className="min-h-screen bg-[#020617] text-white overflow-x-hidden overflow-y-visible">
@@ -910,10 +891,7 @@ export default function EnergyDashboardHomepage() {
                 curve="stepAfter"
                 enableArea
                 areaOpacity={0.15}
-                enablePoints={true}
-                pointSize={0}
-                pointBorderWidth={0}
-                useMesh
+                enablePoints={false}
                 animate={true}
                 motionConfig="gentle"
                 colors={['#3b82f6']}
