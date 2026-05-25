@@ -8,6 +8,120 @@ type EnergyPoint = {
   accumulated: number
 }
 
+type Range = '24h' | '7d' | '30d' | 'custom'
+type ActiveView = 'temporal' | 'distribution' | 'daily' | 'insights'
+type ThemeMode = 'dark' | 'light'
+type TopPage = 'statistics' | 'devices' | 'settings'
+
+function SunIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 2.5v2.2" />
+      <path d="M12 19.3v2.2" />
+      <path d="M21.5 12h-2.2" />
+      <path d="M4.7 12H2.5" />
+      <path d="M18.7 5.3l-1.6 1.6" />
+      <path d="M6.9 17.1l-1.6 1.6" />
+      <path d="M18.7 18.7l-1.6-1.6" />
+      <path d="M6.9 6.9L5.3 5.3" />
+    </svg>
+  )
+}
+
+function MoonIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 12.8A8.8 8.8 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
+    </svg>
+  )
+}
+
+function ChevronDownIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  )
+}
+
+function Sparkline({
+  values,
+  color,
+}: {
+  values: number[]
+  color: string
+}) {
+  const width = 110
+  const height = 42
+  const max = Math.max(...values)
+  const min = Math.min(...values)
+  const range = max - min || 1
+
+  const points = values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * width
+      const y = height - ((value - min) / range) * height
+      return `${x},${y}`
+    })
+    .join(' ')
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="h-11 w-28 overflow-visible"
+    >
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {values.map((value, index) => {
+        const x = (index / (values.length - 1)) * width
+        const y = height - ((value - min) / range) * height
+
+        return (
+          <circle
+            key={index}
+            cx={x}
+            cy={y}
+            r="2.5"
+            fill={color}
+            className="opacity-90"
+          />
+        )
+      })}
+    </svg>
+  )
+}
 
 export default function EnergyDashboardHomepage() {
   const generateEnergyData = (): EnergyPoint[] => {
@@ -15,17 +129,13 @@ export default function EnergyDashboardHomepage() {
 
     const now = new Date()
     const start = new Date(now)
-
     start.setDate(now.getDate() - 30)
 
     const current = new Date(start)
-
     let accumulated = 0
 
     while (current <= now) {
-      const intervalConsumption =
-        Math.floor(Math.random() * 8) + 2
-
+      const intervalConsumption = Math.floor(Math.random() * 8) + 2
       accumulated += intervalConsumption
 
       data.push({
@@ -41,7 +151,26 @@ export default function EnergyDashboardHomepage() {
 
   const energyData = useMemo(() => generateEnergyData(), [])
 
+  const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
+  const [activeView, setActiveView] = useState<ActiveView>('temporal')
+  const [selectedRange, setSelectedRange] = useState<Range>('24h')
+  const [activeTopPage, setActiveTopPage] = useState<TopPage>('statistics')
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showCustomModal, setShowCustomModal] = useState(false)
+
+  const isDarkMode = themeMode === 'dark'
+
   const formatDateInput = (date: Date) => date.toISOString().split('T')[0]
+
+  const [customStartDate, setCustomStartDate] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() - 7)
+    return formatDateInput(date)
+  })
+
+  const [customEndDate, setCustomEndDate] = useState(() => {
+    return formatDateInput(new Date())
+  })
 
   const DatePartsInput = ({
     value,
@@ -74,12 +203,7 @@ export default function EnergyDashboardHomepage() {
       if (isNaN(y)) y = 2024
 
       m = Math.min(Math.max(m, 1), 12)
-
-      d = Math.min(
-        Math.max(d, 1),
-        daysInMonth(m, y)
-      )
-
+      d = Math.min(Math.max(d, 1), daysInMonth(m, y))
       y = Math.min(Math.max(y, 2000), 2100)
 
       onChange(
@@ -88,23 +212,29 @@ export default function EnergyDashboardHomepage() {
     }
 
     return (
-      <div className="flex items-center gap-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm">
+      <div
+        className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm border ${
+          isDarkMode
+            ? 'bg-slate-950 border-white/10 text-white'
+            : 'bg-white border-slate-200 text-slate-950'
+        }`}
+      >
         <input
           value={localDay}
           maxLength={2}
           onClick={e => e.currentTarget.select()}
           onFocus={e => e.currentTarget.select()}
           onChange={e => {
-            const value = e.target.value.replace(/\D/g, '')
-            setLocalDay(value)
+            const nextValue = e.target.value.replace(/\D/g, '')
+            setLocalDay(nextValue)
           }}
-          onBlur={() => {
-            validateAndCommit(localDay, localMonth, localYear)
-          }}
+          onBlur={() => validateAndCommit(localDay, localMonth, localYear)}
           className="w-7 bg-transparent text-center outline-none"
         />
 
-        <span className="text-slate-500">/</span>
+        <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>
+          /
+        </span>
 
         <input
           value={localMonth}
@@ -112,16 +242,16 @@ export default function EnergyDashboardHomepage() {
           onClick={e => e.currentTarget.select()}
           onFocus={e => e.currentTarget.select()}
           onChange={e => {
-            const value = e.target.value.replace(/\D/g, '')
-            setLocalMonth(value)
+            const nextValue = e.target.value.replace(/\D/g, '')
+            setLocalMonth(nextValue)
           }}
-          onBlur={() => {
-            validateAndCommit(localDay, localMonth, localYear)
-          }}
+          onBlur={() => validateAndCommit(localDay, localMonth, localYear)}
           className="w-7 bg-transparent text-center outline-none"
         />
 
-        <span className="text-slate-500">/</span>
+        <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>
+          /
+        </span>
 
         <input
           value={localYear}
@@ -129,12 +259,10 @@ export default function EnergyDashboardHomepage() {
           onClick={e => e.currentTarget.select()}
           onFocus={e => e.currentTarget.select()}
           onChange={e => {
-            const value = e.target.value.replace(/\D/g, '')
-            setLocalYear(value)
+            const nextValue = e.target.value.replace(/\D/g, '')
+            setLocalYear(nextValue)
           }}
-          onBlur={() => {
-            validateAndCommit(localDay, localMonth, localYear)
-          }}
+          onBlur={() => validateAndCommit(localDay, localMonth, localYear)}
           className="w-12 bg-transparent text-center outline-none"
         />
       </div>
@@ -146,206 +274,648 @@ export default function EnergyDashboardHomepage() {
       title: 'Consumo Hoje',
       value: '48.2 kWh',
       growth: '+12%',
+      color: '#22c55e',
+      sparkline: [12, 18, 14, 21, 25, 22, 31, 28, 36],
     },
     {
       title: 'Pico Máximo',
       value: '7.1 kWh',
       growth: '+5%',
+      color: '#3b82f6',
+      sparkline: [3, 4, 5, 4.2, 6, 5.4, 7.1, 6.2, 6.8],
     },
     {
       title: 'Custo Estimado',
       value: '€132',
       growth: '-8%',
+      color: '#f43f5e',
+      sparkline: [150, 148, 145, 141, 139, 137, 134, 133, 132],
     },
     {
       title: 'Eficiência',
       value: '92%',
       growth: '+3%',
+      color: '#a855f7',
+      sparkline: [81, 83, 86, 84, 88, 89, 91, 90, 92],
     },
   ]
 
   const chartTheme = {
     text: {
-      fill: '#94a3b8',
+      fill: isDarkMode ? '#94a3b8' : '#64748b',
       fontSize: 12,
     },
     axis: {
       ticks: {
         text: {
-          fill: '#94a3b8',
+          fill: isDarkMode ? '#94a3b8' : '#64748b',
         },
       },
       legend: {
         text: {
-          fill: '#cbd5e1',
+          fill: isDarkMode ? '#cbd5e1' : '#334155',
         },
       },
       domain: {
         line: {
-          stroke: '#334155',
+          stroke: isDarkMode ? '#334155' : '#cbd5e1',
         },
       },
     },
     grid: {
       line: {
-        stroke: '#1e293b',
+        stroke: isDarkMode ? '#1e293b' : '#e2e8f0',
       },
     },
     tooltip: {
       container: {
-        background: '#0f172a',
-        color: '#fff',
+        background: isDarkMode ? '#020617' : '#ffffff',
+        color: isDarkMode ? '#ffffff' : '#0f172a',
         borderRadius: '12px',
+        boxShadow: '0 16px 40px rgba(15, 23, 42, 0.18)',
       },
     },
   }
 
-  return (
-    <div className="min-h-screen bg-[#020617] text-white overflow-x-hidden overflow-y-visible">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.15),transparent_35%),radial-gradient(circle_at_bottom_left,_rgba(168,85,247,0.12),transparent_30%)]" />
+  const pageClasses = isDarkMode
+    ? 'bg-[#020617] text-white'
+    : 'bg-slate-100 text-slate-950'
 
-      <div className="relative z-10 px-6 py-8 lg:px-12">
-        <header className="flex flex-col gap-4 mb-10">
-          <div>
-            <h1 className="text-4xl lg:text-5xl font-bold tracking-tight">
-              Energy Analytics
-            </h1>
+  const mutedTextClasses = isDarkMode ? 'text-slate-400' : 'text-slate-500'
 
-            <p className="text-slate-400 mt-3 text-lg max-w-2xl">
-              Monitoriza o teu consumo energético em tempo real
-              com gráficos fluidos e insights inteligentes.
+  const subtleBorderClasses = isDarkMode ? 'border-white/10' : 'border-slate-200'
+
+  const statsCardClasses = isDarkMode
+    ? 'rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl hover:bg-white/[0.07] transition-all'
+    : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all'
+
+  const tabContainerClasses = isDarkMode
+    ? 'flex flex-wrap gap-2 rounded-2xl bg-white/5 border border-white/10 p-1 w-fit'
+    : 'flex flex-wrap gap-2 rounded-2xl bg-white border border-slate-200 p-1 w-fit'
+
+  const rangeContainerClasses = isDarkMode
+    ? 'flex gap-2 rounded-2xl bg-white/5 border border-white/10 p-1 w-fit'
+    : 'flex gap-2 rounded-2xl bg-white border border-slate-200 p-1 w-fit'
+
+  const renderMainContent = () => {
+    if (activeView === 'temporal') {
+      return (
+        <TemporalEnergyChart
+          energyData={energyData}
+          chartTheme={chartTheme}
+          selectedRange={selectedRange}
+          customStartDate={customStartDate}
+          customEndDate={customEndDate}
+          isDarkMode={isDarkMode}
+        />
+      )
+    }
+
+    if (activeView === 'distribution') {
+      return (
+        <EnergyDistributionChart
+          energyData={energyData}
+          chartTheme={chartTheme}
+          selectedRange={selectedRange}
+          customStartDate={customStartDate}
+          customEndDate={customEndDate}
+          isDarkMode={isDarkMode}
+        />
+      )
+    }
+
+    if (activeView === 'daily') {
+      return (
+        <section>
+          <div className="mb-6">
+            <h3
+              className={`text-2xl font-bold ${
+                isDarkMode ? 'text-white' : 'text-slate-950'
+              }`}
+            >
+              Consumo Diário
+            </h3>
+
+            <p className={`${mutedTextClasses} mt-1`}>
+              Horas de maior utilização
             </p>
           </div>
-        </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
-          {stats.map(item => (
-            <div
-              key={item.title}
-              className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl hover:scale-[1.02] transition-all"
+          <div className="h-[420px]">
+            <ResponsiveAreaBump
+              data={[
+                {
+                  id: 'Hoje',
+                  data: Array.from({ length: 12 }).map((_, index) => ({
+                    x: `${index * 2}:00`,
+                    y: Math.floor(Math.random() * 10),
+                  })),
+                },
+              ]}
+              theme={chartTheme}
+              margin={{
+                top: 40,
+                right: 40,
+                bottom: 40,
+                left: 40,
+              }}
+              spacing={8}
+              colors={['#1d4ed8']}
+              fillOpacity={0.22}
+              blendMode="normal"
+              animate
+              motionConfig="gentle"
+            />
+          </div>
+        </section>
+      )
+    }
+
+    return (
+      <section>
+        <div className="mb-6">
+          <h3
+            className={`text-2xl font-bold ${
+              isDarkMode ? 'text-white' : 'text-slate-950'
+            }`}
+          >
+            Insights Inteligentes
+          </h3>
+
+          <p className={`${mutedTextClasses} mt-1`}>
+            Sugestões automáticas baseadas no consumo
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div
+            className={`rounded-2xl border p-5 ${
+              isDarkMode
+                ? 'border-emerald-500/20 bg-emerald-500/10'
+                : 'border-emerald-200 bg-emerald-50'
+            }`}
+          >
+            <h4
+              className={`font-semibold ${
+                isDarkMode ? 'text-emerald-300' : 'text-emerald-700'
+              }`}
             >
-              <p className="text-slate-400 text-sm">
-                {item.title}
-              </p>
+              Melhor horário
+            </h4>
 
-              <div className="flex items-end justify-between mt-4">
-                <h2 className="text-3xl font-bold">
-                  {item.value}
+            <p
+              className={`mt-2 leading-relaxed ${
+                isDarkMode ? 'text-slate-300' : 'text-slate-600'
+              }`}
+            >
+              O menor consumo energético acontece entre as 02:00 e as 06:00.
+            </p>
+          </div>
+
+          <div
+            className={`rounded-2xl border p-5 ${
+              isDarkMode
+                ? 'border-yellow-500/20 bg-yellow-500/10'
+                : 'border-yellow-200 bg-yellow-50'
+            }`}
+          >
+            <h4
+              className={`font-semibold ${
+                isDarkMode ? 'text-yellow-300' : 'text-yellow-700'
+              }`}
+            >
+              Pico detetado
+            </h4>
+
+            <p
+              className={`mt-2 leading-relaxed ${
+                isDarkMode ? 'text-slate-300' : 'text-slate-600'
+              }`}
+            >
+              O maior pico de consumo acontece perto das 20:00.
+            </p>
+          </div>
+
+          <div
+            className={`rounded-2xl border p-5 ${
+              isDarkMode
+                ? 'border-blue-500/20 bg-blue-500/10'
+                : 'border-blue-200 bg-blue-50'
+            }`}
+          >
+            <h4
+              className={`font-semibold ${
+                isDarkMode ? 'text-blue-300' : 'text-blue-700'
+              }`}
+            >
+              Recomendação
+            </h4>
+
+            <p
+              className={`mt-2 leading-relaxed ${
+                isDarkMode ? 'text-slate-300' : 'text-slate-600'
+              }`}
+            >
+              Transferir cargas pesadas para horários noturnos pode reduzir
+              custos mensais.
+            </p>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  const renderDevicesPage = () => {
+    return (
+      <section className="pt-8">
+        <div className="mb-6">
+          <h2 className="text-4xl font-bold">
+            Devices
+          </h2>
+
+          <p className={mutedTextClasses}>
+            Gestão dos equipamentos ligados à aplicação.
+          </p>
+        </div>
+
+        <div
+          className={`rounded-2xl border border-dashed p-10 text-center ${
+            isDarkMode
+              ? 'border-white/10 text-slate-400'
+              : 'border-slate-300 text-slate-500'
+          }`}
+        >
+          Ainda não existem dispositivos configurados.
+        </div>
+      </section>
+    )
+  }
+
+  const renderSettingsPage = () => {
+    return (
+      <section className="pt-8">
+        <div className="mb-6">
+          <h2 className="text-4xl font-bold">
+            Settings
+          </h2>
+
+          <p className={mutedTextClasses}>
+            Preferências e configurações da aplicação.
+          </p>
+        </div>
+
+        <div
+          className={`rounded-2xl border border-dashed p-10 text-center ${
+            isDarkMode
+              ? 'border-white/10 text-slate-400'
+              : 'border-slate-300 text-slate-500'
+          }`}
+        >
+          Ainda não existem definições disponíveis.
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <div className={`min-h-screen overflow-x-hidden ${pageClasses}`}>
+      <div
+        className={`sticky top-0 z-50 border-b backdrop-blur-xl ${
+          isDarkMode
+            ? 'border-white/10 bg-[#020617]/90'
+            : 'border-slate-200 bg-slate-100/90'
+        }`}
+      >
+        <div className="mx-auto w-[94%] xl:w-[90%] px-6 xl:px-8 py-5">
+          <header className="flex items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="h-11 w-11 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-blue-600/25">
+              V
+            </div>
+
+            <div>
+              <h1 className="text-4xl font-bold tracking-tight">
+                Volt
+              </h1>
+
+              <p className={`text-sm ${mutedTextClasses}`}>
+                Energy Analytics Dashboard
+              </p>
+            </div>
+          </div>
+
+          <nav className="hidden lg:flex items-center gap-8">
+            {[
+              { id: 'statistics', label: 'Statistics' },
+              { id: 'devices', label: 'Devices' },
+              { id: 'settings', label: 'Settings' },
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTopPage(item.id as TopPage)}
+                className={`cursor-pointer text-sm font-semibold transition-colors ${
+                  activeTopPage === item.id
+                    ? isDarkMode
+                      ? 'text-blue-400'
+                      : 'text-blue-600'
+                    : isDarkMode
+                      ? 'text-slate-400 hover:text-white'
+                      : 'text-slate-500 hover:text-slate-950'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-6">
+            <button
+              onClick={() =>
+                setThemeMode(current =>
+                  current === 'dark' ? 'light' : 'dark'
+                )
+              }
+              className="cursor-pointer flex items-center gap-3"
+              aria-label="Alterar tema"
+            >
+              <span
+                className={`transition-colors ${
+                  isDarkMode ? 'text-slate-300' : 'text-amber-500'
+                }`}
+              >
+                {isDarkMode ? (
+                  <MoonIcon className="h-5 w-5" />
+                ) : (
+                  <SunIcon className="h-5 w-5" />
+                )}
+              </span>
+
+              <div
+                className={`relative h-7 w-14 rounded-full transition-all duration-300 ${
+                  isDarkMode ? 'bg-blue-600/30' : 'bg-amber-400/40'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-lg transition-transform duration-300 ${
+                    isDarkMode ? 'translate-x-[-24px]' : 'translate-x-[4px]'
+                  }`}
+                />
+              </div>
+
+              <span
+                className={`hidden sm:inline text-sm font-medium ${
+                  isDarkMode ? 'text-slate-300' : 'text-slate-700'
+                }`}
+              >
+                {isDarkMode ? 'Dark' : 'Light'}
+              </span>
+            </button>
+
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(value => !value)}
+                className="cursor-pointer flex items-center gap-3"
+              >
+                <img
+                  src="https://i.pravatar.cc/80?img=12"
+                  alt="Utilizador"
+                  className="h-12 w-12 rounded-full object-cover ring-2 ring-blue-500/40"
+                />
+
+                <div className="hidden sm:block text-left">
+                  <p className="text-sm font-semibold">
+                    João Rodrigues
+                  </p>
+
+                  <p className={`text-xs ${mutedTextClasses}`}>
+                    Admin
+                  </p>
+                </div>
+
+                <ChevronDownIcon
+                  className={`h-4 w-4 ${mutedTextClasses}`}
+                />
+              </button>
+
+              {showUserMenu && (
+                <div
+                  className={`absolute right-0 top-16 z-50 w-52 rounded-2xl border shadow-2xl overflow-hidden ${
+                    isDarkMode
+                      ? 'border-white/10 bg-slate-950'
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div
+                    className={`px-4 py-3 border-b ${
+                      isDarkMode ? 'border-white/10' : 'border-slate-200'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold">
+                      João Rodrigues
+                    </p>
+
+                    <p className={`text-xs ${mutedTextClasses}`}>
+                      jpcr.2304@gmail.com
+                    </p>
+                  </div>
+
+                  <button
+                    className={`w-full px-4 py-3 text-left text-sm ${
+                      isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    Account
+                  </button>
+
+                  <button
+                    className={`w-full px-4 py-3 text-left text-sm ${
+                      isDarkMode
+                        ? 'text-rose-300 hover:bg-rose-500/10'
+                        : 'text-rose-600 hover:bg-rose-50'
+                    }`}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          </header>
+        </div>
+      </div>
+
+      <main className="mx-auto w-[92%] xl:w-[80%] py-8">
+          {activeTopPage === 'statistics' && (
+            <>
+              <div className="flex flex-col gap-2 mb-6">
+                <h2 className="text-4xl font-bold">
+                  Statistics
                 </h2>
 
-                <span className="text-emerald-400 font-medium">
-                  {item.growth}
-                </span>
+                <p className={mutedTextClasses}>
+                  Resumo geral do consumo energético da aplicação.
+                </p>
               </div>
-            </div>
-          ))}
-        </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-          <TemporalEnergyChart
-            energyData={energyData}
-            chartTheme={chartTheme}
-            DatePartsInput={DatePartsInput}
-          />
+              <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+                {stats.map(item => (
+                  <div
+                    key={item.title}
+                    className={statsCardClasses}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p
+                          className={`text-xs uppercase tracking-wide font-semibold ${mutedTextClasses}`}
+                        >
+                          {item.title}
+                        </p>
 
-          <EnergyDistributionChart
-            energyData={energyData}
-            chartTheme={chartTheme}
-            DatePartsInput={DatePartsInput}
-          />
-        </section>
+                        <h3 className="text-3xl font-bold mt-4 whitespace-nowrap">
+                          {item.value}
+                        </h3>
+                      </div>
 
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 h-[350px] shadow-2xl">
-            <div className="mb-4">
-              <h3 className="text-2xl font-semibold">
-                Consumo Diário
-              </h3>
+                      <Sparkline
+                        values={item.sparkline}
+                        color={item.color}
+                      />
+                    </div>
 
-              <p className="text-slate-400 mt-1">
-                Horas de maior utilização
-              </p>
-            </div>
+                    <div className="flex items-center justify-between mt-4">
+                      <span className={`text-sm ${mutedTextClasses}`}>
+                        Variação
+                      </span>
 
-            <div className="h-[250px]">
-              <ResponsiveAreaBump
-                data={[
-                  {
-                    id: 'Hoje',
-                    data: Array.from({ length: 12 }).map(
-                      (_, index) => ({
-                        x: `${index * 2}:00`,
-                        y: Math.floor(
-                          Math.random() * 10
-                        ),
-                      })
-                    ),
-                  },
-                ]}
-                theme={chartTheme}
-                margin={{
-                  top: 40,
-                  right: 40,
-                  bottom: 40,
-                  left: 40,
-                }}
-                spacing={8}
-                colors={['#06b6d4']}
-                blendMode="multiply"
-                animate
-                motionConfig="gentle"
+                      <span
+                        className={`font-bold ${
+                          item.growth.startsWith('-')
+                            ? 'text-rose-500'
+                            : 'text-emerald-400'
+                        }`}
+                      >
+                        {item.growth}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </section>
+
+              <section
+                className={`flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-8 border-t pt-6 ${subtleBorderClasses}`}
+              >
+                <div className={tabContainerClasses}>
+                  {[
+                    { id: 'temporal', label: 'Temporal' },
+                    { id: 'distribution', label: 'Distribuição' },
+                    { id: 'daily', label: 'Consumo Diário' },
+                    { id: 'insights', label: 'Insights' },
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveView(item.id as ActiveView)}
+                      className={`cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                        activeView === item.id
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                          : isDarkMode
+                            ? 'text-slate-400 hover:text-white'
+                            : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className={rangeContainerClasses}>
+                  {(['24h', '7d', '30d', 'custom'] as const).map(range => (
+                    <button
+                      key={range}
+                      onClick={() => {
+                        setSelectedRange(range)
+
+                        if (range === 'custom') {
+                          setShowCustomModal(true)
+                        }
+                      }}
+                      className={`cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                        selectedRange === range
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                          : isDarkMode
+                            ? 'text-slate-400 hover:text-white'
+                            : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      {range === 'custom' ? 'Custom' : range}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="pt-2">
+                {renderMainContent()}
+              </section>
+            </>
+          )}
+
+          {activeTopPage === 'devices' && renderDevicesPage()}
+
+          {activeTopPage === 'settings' && renderSettingsPage()}
+
+          {showCustomModal && activeTopPage === 'statistics' && (
+            <>
+              <div
+                onClick={() => setShowCustomModal(false)}
+                className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px]"
               />
-            </div>
-          </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl">
-            <div className="mb-6">
-              <h3 className="text-2xl font-semibold">
-                Insights Inteligentes
-              </h3>
+              <div
+                className={`fixed left-1/2 top-1/2 z-50 w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-3xl border p-5 shadow-2xl ${
+                  isDarkMode
+                    ? 'border-white/10 bg-slate-950'
+                    : 'border-slate-200 bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-5">
+                  <h4 className="font-semibold text-lg">
+                    Intervalo personalizado
+                  </h4>
 
-              <p className="text-slate-400 mt-1">
-                Sugestões automáticas baseadas no consumo
-              </p>
-            </div>
+                  <button
+                    onClick={() => setShowCustomModal(false)}
+                    className={`cursor-pointer ${mutedTextClasses} hover:opacity-80`}
+                  >
+                    ✕
+                  </button>
+                </div>
 
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
-                <h4 className="font-semibold text-emerald-300">
-                  Melhor horário
-                </h4>
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <label className={`text-sm ${mutedTextClasses}`}>
+                      Data inicial
+                    </label>
 
-                <p className="text-slate-300 mt-2 leading-relaxed">
-                  O menor consumo energético acontece entre
-                  as 02:00 e as 06:00.
-                </p>
+                    <DatePartsInput
+                      value={customStartDate}
+                      onChange={setCustomStartDate}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className={`text-sm ${mutedTextClasses}`}>
+                      Data final
+                    </label>
+
+                    <DatePartsInput
+                      value={customEndDate}
+                      onChange={setCustomEndDate}
+                    />
+                  </div>
+                </div>
               </div>
-
-              <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-5">
-                <h4 className="font-semibold text-yellow-300">
-                  Pico detetado
-                </h4>
-
-                <p className="text-slate-300 mt-2 leading-relaxed">
-                  O maior pico de consumo acontece perto das
-                  20:00.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
-                <h4 className="font-semibold text-blue-300">
-                  Recomendação
-                </h4>
-
-                <p className="text-slate-300 mt-2 leading-relaxed">
-                  Transferir cargas pesadas para horários
-                  noturnos pode reduzir custos mensais.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+            </>
+          )}
+         </main>
       </div>
-    </div>
-  )
+    )
 }

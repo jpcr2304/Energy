@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { ResponsivePie } from '@nivo/pie'
 
 type EnergyPoint = {
@@ -6,44 +6,25 @@ type EnergyPoint = {
   accumulated: number
 }
 
-type DatePartsInputProps = {
-  value: string
-  onChange: (value: string) => void
-}
+type Range = '24h' | '7d' | '30d' | 'custom'
 
 type EnergyDistributionChartProps = {
   energyData: EnergyPoint[]
   chartTheme: any
-  DatePartsInput: React.ComponentType<DatePartsInputProps>
+  selectedRange: Range
+  customStartDate: string
+  customEndDate: string
+  isDarkMode: boolean
 }
-
-type Range = '24h' | '7d' | '30d' | 'custom'
-
-const formatDateInput = (date: Date) => date.toISOString().split('T')[0]
 
 export default function EnergyDistributionChart({
   energyData,
   chartTheme,
-  DatePartsInput,
+  selectedRange,
+  customStartDate,
+  customEndDate,
+  isDarkMode,
 }: EnergyDistributionChartProps) {
-  const [selectedDistributionRange, setSelectedDistributionRange] =
-    useState<Range>('24h')
-
-  const [distributionStartDate, setDistributionStartDate] = useState(() => {
-    const date = new Date()
-    date.setDate(date.getDate() - 7)
-    return formatDateInput(date)
-  })
-
-  const [distributionEndDate, setDistributionEndDate] = useState(() => {
-    return formatDateInput(new Date())
-  })
-
-  const [
-    showDistributionCustomModal,
-    setShowDistributionCustomModal,
-  ] = useState(false)
-
   const pieData = useMemo(() => {
     const now = new Date()
 
@@ -51,9 +32,9 @@ export default function EnergyDistributionChart({
     let rangeStart: Date | null = null
     let rangeEnd: Date | null = now
 
-    if (selectedDistributionRange === 'custom') {
+    if (selectedRange === 'custom') {
       const [startYear, startMonth, startDay] =
-        distributionStartDate.split('-').map(Number)
+        customStartDate.split('-').map(Number)
 
       const start = new Date(
         startYear,
@@ -66,7 +47,7 @@ export default function EnergyDistributionChart({
       )
 
       const [endYear, endMonth, endDay] =
-        distributionEndDate.split('-').map(Number)
+        customEndDate.split('-').map(Number)
 
       const end = new Date(
         endYear,
@@ -78,11 +59,7 @@ export default function EnergyDistributionChart({
         999
       )
 
-      if (
-        isNaN(start.getTime()) ||
-        isNaN(end.getTime()) ||
-        start > end
-      ) {
+      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
         return []
       }
 
@@ -93,15 +70,15 @@ export default function EnergyDistributionChart({
         item => item.timestamp >= start && item.timestamp <= end
       )
     } else {
-      if (selectedDistributionRange === '24h') {
+      if (selectedRange === '24h') {
         rangeStart = new Date(now.getTime() - 24 * 60 * 60 * 1000)
       }
 
-      if (selectedDistributionRange === '7d') {
+      if (selectedRange === '7d') {
         rangeStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
       }
 
-      if (selectedDistributionRange === '30d') {
+      if (selectedRange === '30d') {
         rangeStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
       }
 
@@ -110,11 +87,12 @@ export default function EnergyDistributionChart({
       )
     }
 
+    if (filtered.length <= 1) {
+      return []
+    }
+
     const totalConsumption =
-      filtered.length > 1
-        ? filtered[filtered.length - 1].accumulated -
-          filtered[0].accumulated
-        : 0
+      filtered[filtered.length - 1].accumulated - filtered[0].accumulated
 
     const rangeDurationInDays =
       rangeStart && rangeEnd
@@ -125,8 +103,7 @@ export default function EnergyDistributionChart({
           )
         : 1
 
-    const averageDailyConsumption =
-      totalConsumption / rangeDurationInDays
+    const averageDailyConsumption = totalConsumption / rangeDurationInDays
 
     const divisions = [
       {
@@ -159,140 +136,177 @@ export default function EnergyDistributionChart({
     const rawData = divisions.map(item => ({
       id: item.id,
       label: item.label,
-      value: Number(
-        (averageDailyConsumption * item.percentage).toFixed(1)
-      ),
+      percentage: item.percentage,
+      value: Number((averageDailyConsumption * item.percentage).toFixed(1)),
     }))
 
     const sorted = [...rawData].sort((a, b) => b.value - a.value)
 
     return sorted.map((item, index) => ({
       ...item,
-      color: [
-        '#1d4ed8',
-        '#2563eb',
-        '#3b82f6',
-        '#60a5fa',
-        '#93c5fd',
-      ][index],
+      color: ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd'][index],
     }))
-  }, [
-    selectedDistributionRange,
-    distributionStartDate,
-    distributionEndDate,
-    energyData,
-  ])
+  }, [selectedRange, customStartDate, customEndDate, energyData])
+
+  const totalAverageDailyConsumption = pieData.reduce(
+    (sum, item) => sum + item.value,
+    0
+  )
+
+  if (pieData.length === 0) {
+    return (
+      <section className="relative z-10">
+        <div className="mb-4">
+          <h3
+            className={`text-2xl font-bold ${
+              isDarkMode ? 'text-white' : 'text-slate-950'
+            }`}
+          >
+            Distribuição
+          </h3>
+
+          <p className={isDarkMode ? 'text-slate-400 mt-1' : 'text-slate-500 mt-1'}>
+            Consumo médio diário por divisão
+          </p>
+        </div>
+
+        <div
+          className={`rounded-2xl border border-dashed px-6 py-16 text-center ${
+            isDarkMode
+              ? 'border-white/10 text-slate-400'
+              : 'border-slate-300 text-slate-500'
+          }`}
+        >
+          Sem dados disponíveis para o intervalo selecionado.
+        </div>
+      </section>
+    )
+  }
 
   return (
-    <div className="relative z-10 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 h-[520px] shadow-2xl">
+    <section className="relative z-10">
       <div className="mb-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-2xl font-semibold">
-              Distribuição
-            </h3>
+        <h3
+          className={`text-2xl font-bold ${
+            isDarkMode ? 'text-white' : 'text-slate-950'
+          }`}
+        >
+          Distribuição
+        </h3>
 
-            <p className="text-slate-400 mt-1">
-              Média diária por divisão
-            </p>
-          </div>
-
-          <div className="flex gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
-            {(['24h', '7d', '30d', 'custom'] as const).map(range => (
-              <button
-                key={range}
-                onClick={() => {
-                  setSelectedDistributionRange(range)
-
-                  if (range === 'custom') {
-                    setShowDistributionCustomModal(true)
-                  }
-                }}
-                className={`cursor-pointer px-4 py-2 rounded-xl text-sm transition-all ${
-                  selectedDistributionRange === range
-                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                    : 'text-slate-400 hover:text-white hover:bg-blue-500/10'
-                }`}
-              >
-                {range === 'custom' ? 'Custom' : range}
-              </button>
-            ))}
-          </div>
-        </div>
+        <p className={isDarkMode ? 'text-slate-400 mt-1' : 'text-slate-500 mt-1'}>
+          Consumo médio diário por divisão
+        </p>
       </div>
 
-      {showDistributionCustomModal && (
-        <>
-          <div
-            onClick={() => setShowDistributionCustomModal(false)}
-            className="fixed inset-0 z-[90]"
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-8 items-center mt-8">
+        <div className="relative h-[280px]">
+          <ResponsivePie
+            data={pieData}
+            theme={chartTheme}
+            margin={{
+              top: 10,
+              right: 10,
+              bottom: 10,
+              left: 10,
+            }}
+            innerRadius={0.72}
+            padAngle={3}
+            cornerRadius={8}
+            activeOuterRadiusOffset={8}
+            colors={{ datum: 'data.color' }}
+            borderWidth={0}
+            enableArcLinkLabels={false}
+            enableArcLabels={false}
+            animate
+            motionConfig="wobbly"
           />
 
-          <div className="absolute top-24 right-6 z-[100] w-[340px] rounded-3xl border border-white/10 bg-slate-950/95 backdrop-blur-2xl p-5 shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h4 className="font-semibold text-lg">
-                Intervalo personalizado
-              </h4>
-
-              <button
-                onClick={() => setShowDistributionCustomModal(false)}
-                className="cursor-pointer text-slate-400 hover:text-white"
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="text-center">
+              <div
+                className={`text-3xl font-bold ${
+                  isDarkMode ? 'text-white' : 'text-slate-950'
+                }`}
               >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm text-slate-400">
-                  Data inicial
-                </label>
-
-                <DatePartsInput
-                  value={distributionStartDate}
-                  onChange={setDistributionStartDate}
-                />
+                {totalAverageDailyConsumption.toFixed(1)}
               </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="text-sm text-slate-400">
-                  Data final
-                </label>
-
-                <DatePartsInput
-                  value={distributionEndDate}
-                  onChange={setDistributionEndDate}
-                />
+              <div
+                className={
+                  isDarkMode
+                    ? 'text-xs text-slate-400 mt-1'
+                    : 'text-xs text-slate-500 mt-1'
+                }
+              >
+                kWh/dia
               </div>
             </div>
           </div>
-        </>
-      )}
+        </div>
 
-      <div className="h-[360px] mt-4">
-        <ResponsivePie
-          data={pieData}
-          theme={chartTheme}
-          margin={{
-            top: 20,
-            right: 20,
-            bottom: 20,
-            left: 20,
-          }}
-          innerRadius={0.5}
-          padAngle={2}
-          cornerRadius={6}
-          activeOuterRadiusOffset={10}
-          colors={{ datum: 'data.color' }}
-          borderWidth={0}
-          enableArcLinkLabels={false}
-          arcLabelsSkipAngle={10}
-          arcLabelsTextColor="#ffffff"
-          arcLabel={d => `${d.value} kWh`}
-          animate
-          motionConfig="wobbly"
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {pieData.map(item => (
+            <div
+              key={item.id}
+              className={`rounded-2xl border px-4 py-3 ${
+                isDarkMode
+                  ? 'border-white/10 bg-white/[0.03]'
+                  : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
+
+                  <span
+                    className={`font-medium text-sm ${
+                      isDarkMode ? 'text-white' : 'text-slate-950'
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                </div>
+
+                <div className="text-right">
+                  <div
+                    className={`text-sm font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-slate-950'
+                    }`}
+                  >
+                    {item.value} kWh/dia
+                  </div>
+
+                  <div
+                    className={`text-xs ${
+                      isDarkMode ? 'text-slate-500' : 'text-slate-400'
+                    }`}
+                  >
+                    {Math.round(item.percentage * 100)}%
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={`mt-3 h-2 rounded-full overflow-hidden ${
+                  isDarkMode ? 'bg-white/10' : 'bg-slate-200'
+                }`}
+              >
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${item.percentage * 100}%`,
+                    backgroundColor: item.color,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </section>
   )
 }

@@ -6,19 +6,30 @@ type EnergyPoint = {
   accumulated: number
 }
 
+type Range = '24h' | '7d' | '30d' | 'custom'
+
 type TemporalEnergyChartProps = {
   energyData: EnergyPoint[]
   chartTheme: any
-  DatePartsInput: React.ComponentType<{
-    value: string
-    onChange: (value: string) => void
-  }>
+  selectedRange: Range
+  customStartDate: string
+  customEndDate: string
+  isDarkMode: boolean
 }
 
-type Range = '24h' | '7d' | '30d' | 'custom'
+function normalizeTo24Intervals(
+  data: EnergyPoint[],
+  forceNormalize = false
+): EnergyPoint[] {
+  if (data.length === 0) {
+    return []
+  }
 
-function normalizeTo24Intervals(data: EnergyPoint[]): EnergyPoint[] {
-  if (data.length <= 25) {
+  if (data.length === 1) {
+    return data
+  }
+
+  if (!forceNormalize && data.length <= 25) {
     return data
   }
 
@@ -27,6 +38,10 @@ function normalizeTo24Intervals(data: EnergyPoint[]): EnergyPoint[] {
   const startTime = data[0].timestamp.getTime()
   const endTime = data[data.length - 1].timestamp.getTime()
 
+  if (startTime === endTime) {
+    return data
+  }
+
   const intervalDuration = (endTime - startTime) / 24
 
   result.push({
@@ -34,70 +49,36 @@ function normalizeTo24Intervals(data: EnergyPoint[]): EnergyPoint[] {
     accumulated: data[0].accumulated,
   })
 
-  let syntheticAccumulated = data[0].accumulated
-
   for (let i = 0; i < 24; i++) {
-    const intervalStart = startTime + i * intervalDuration
     const intervalEnd = startTime + (i + 1) * intervalDuration
 
-    const pointsInInterval = data.filter(
-      item =>
-        item.timestamp.getTime() >= intervalStart &&
-        item.timestamp.getTime() <= intervalEnd
+    const pointsBeforeOrAtEnd = data.filter(
+      item => item.timestamp.getTime() <= intervalEnd
     )
 
-    let averageConsumption = 0
-
-    if (pointsInInterval.length > 1) {
-      const first = pointsInInterval[0]
-      const last = pointsInInterval[pointsInInterval.length - 1]
-
-      const consumption = last.accumulated - first.accumulated
-
-      const hours =
-        (last.timestamp.getTime() - first.timestamp.getTime()) /
-        (1000 * 60 * 60)
-
-      averageConsumption = hours > 0 ? consumption / hours : 0
-    }
-
-    syntheticAccumulated +=
-      averageConsumption * (intervalDuration / (1000 * 60 * 60))
+    const endPoint =
+      pointsBeforeOrAtEnd[pointsBeforeOrAtEnd.length - 1] ?? data[0]
 
     result.push({
       timestamp: new Date(intervalEnd),
-      accumulated: syntheticAccumulated,
+      accumulated: endPoint.accumulated,
     })
   }
 
   return result
 }
 
-const formatDateInput = (date: Date) => date.toISOString().split('T')[0]
-
 export default function TemporalEnergyChart({
   energyData,
   chartTheme,
-  DatePartsInput,
+  selectedRange,
+  customStartDate,
+  customEndDate,
+  isDarkMode,
 }: TemporalEnergyChartProps) {
   const chartContainerRef = useRef<HTMLDivElement | null>(null)
 
-  const [selectedRange, setSelectedRange] = useState<Range>('24h')
-
-  const [customStartDate, setCustomStartDate] = useState(() => {
-    const date = new Date()
-    date.setDate(date.getDate() - 7)
-    return formatDateInput(date)
-  })
-
-  const [customEndDate, setCustomEndDate] = useState(() => {
-    return formatDateInput(new Date())
-  })
-
-  const [showCustomModal, setShowCustomModal] = useState(false)
-
   const [activeSliceIndex, setActiveSliceIndex] = useState<number | null>(null)
-
   const [tooltip, setTooltip] = useState<{
     x: number
     y: number
@@ -150,7 +131,7 @@ export default function TemporalEnergyChart({
         999
       )
 
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
         return []
       }
 
@@ -161,7 +142,11 @@ export default function TemporalEnergyChart({
       filtered = energyData.filter(item => item.timestamp >= startDate)
     }
 
-    return normalizeTo24Intervals(filtered)
+    if (filtered.length === 0) {
+      return []
+    }
+
+    return normalizeTo24Intervals(filtered, selectedRange === 'custom')
   }, [selectedRange, energyData, customStartDate, customEndDate])
 
   const currentChartData = useMemo(() => {
@@ -242,7 +227,10 @@ export default function TemporalEnergyChart({
     return 'Intervalo personalizado'
   }, [selectedRange])
 
-  const IntervalHoverLayer = ({ innerHeight, xScale }: any) => {
+  const IntervalHoverLayer = ({
+    innerHeight,
+    xScale,
+  }: any) => {
     const points = currentChartData[0].data
 
     return (
@@ -264,11 +252,9 @@ export default function TemporalEnergyChart({
               onMouseMove={event => {
                 if (!chartContainerRef.current) return
 
-                const rect =
-                  chartContainerRef.current.getBoundingClientRect()
+                const rect = chartContainerRef.current.getBoundingClientRect()
 
                 setActiveSliceIndex(index)
-
                 setTooltip({
                   x: event.clientX - rect.left,
                   y: event.clientY - rect.top,
@@ -286,7 +272,10 @@ export default function TemporalEnergyChart({
     )
   }
 
-  const IntervalHighlightLayer = ({ innerHeight, xScale }: any) => {
+  const IntervalHighlightLayer = ({
+    innerHeight,
+    xScale,
+  }: any) => {
     if (activeSliceIndex === null) return null
 
     const points = currentChartData[0].data
@@ -309,8 +298,16 @@ export default function TemporalEnergyChart({
           y={0}
           width={width}
           height={innerHeight}
-          fill="rgba(255,255,255,0.08)"
-          stroke="rgba(255,255,255,0.22)"
+          fill={
+            isDarkMode
+              ? 'rgba(255,255,255,0.08)'
+              : 'rgba(37,99,235,0.08)'
+          }
+          stroke={
+            isDarkMode
+              ? 'rgba(255,255,255,0.22)'
+              : 'rgba(37,99,235,0.25)'
+          }
           strokeWidth={1.5}
         />
       </g>
@@ -322,121 +319,75 @@ export default function TemporalEnergyChart({
     .map(point => point.y)
 
   const maxY = yValues.length > 0 ? Math.max(...yValues) : 0
+  const computedMaxY = Math.max(1, Math.ceil(maxY * 1.2))
+
+  const tooltipWidth = 256
+  const tooltipOffset = 16
+
+  const shouldShowTooltipOnLeft =
+    tooltip &&
+    chartContainerRef.current &&
+    chartContainerRef.current.getBoundingClientRect().left +
+      tooltip.x +
+      tooltipOffset +
+      tooltipWidth >
+      window.innerWidth - 16
+
+  const tooltipLeft = tooltip
+    ? shouldShowTooltipOnLeft
+      ? tooltip.x - tooltipWidth - tooltipOffset
+      : tooltip.x + tooltipOffset
+    : 0
+
+  if (currentChartData[0].data.length === 0) {
+    return (
+      <section>
+        <div className="mb-6">
+          <h3
+            className={`text-2xl font-bold ${
+              isDarkMode ? 'text-white' : 'text-slate-950'
+            }`}
+          >
+            {chartTitle}
+          </h3>
+
+          <p className={isDarkMode ? 'text-slate-400 mt-1' : 'text-slate-500 mt-1'}>
+            Visualização temporal do consumo energético
+          </p>
+        </div>
+
+        <div
+          className={`rounded-2xl border border-dashed px-6 py-16 text-center ${
+            isDarkMode
+              ? 'border-white/10 text-slate-400'
+              : 'border-slate-300 text-slate-500'
+          }`}
+        >
+          Sem dados disponíveis para o intervalo selecionado.
+        </div>
+      </section>
+    )
+  }
 
   return (
-    <div className="relative z-50 xl:col-span-2 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 h-[520px] shadow-2xl">
-      <div className="flex flex-col gap-5 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-2xl font-semibold">{chartTitle}</h3>
+    <section className="relative z-50">
+      <div className="mb-6">
+        <h3
+          className={`text-2xl font-bold ${
+            isDarkMode ? 'text-white' : 'text-slate-950'
+          }`}
+        >
+          {chartTitle}
+        </h3>
 
-            <p className="text-slate-400 mt-1">
-              Visualização temporal do consumo energético
-            </p>
-          </div>
-
-          <div className="flex gap-2 rounded-2xl border border-white/10 bg-white/5 p-1">
-            <button
-              onClick={() => setSelectedRange('24h')}
-              className={`cursor-pointer px-4 py-2 rounded-xl text-sm transition-all ${
-                selectedRange === '24h'
-                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-blue-500/10'
-              }`}
-            >
-              24h
-            </button>
-
-            <button
-              onClick={() => setSelectedRange('7d')}
-              className={`cursor-pointer px-4 py-2 rounded-xl text-sm transition-all ${
-                selectedRange === '7d'
-                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-blue-500/10'
-              }`}
-            >
-              7d
-            </button>
-
-            <button
-              onClick={() => setSelectedRange('30d')}
-              className={`cursor-pointer px-4 py-2 rounded-xl text-sm transition-all ${
-                selectedRange === '30d'
-                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-blue-500/10'
-              }`}
-            >
-              30d
-            </button>
-
-            <button
-              onClick={() => {
-                setSelectedRange('custom')
-                setShowCustomModal(true)
-              }}
-              className={`cursor-pointer px-4 py-2 rounded-xl text-sm transition-all ${
-                selectedRange === 'custom'
-                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-blue-500/10'
-              }`}
-            >
-              Custom
-            </button>
-          </div>
-        </div>
+        <p className={isDarkMode ? 'text-slate-400 mt-1' : 'text-slate-500 mt-1'}>
+          Visualização temporal do consumo energético
+        </p>
       </div>
-
-      {showCustomModal && (
-        <>
-          <div
-            onClick={() => setShowCustomModal(false)}
-            className="fixed inset-0 z-[90]"
-          />
-
-          <div className="absolute top-24 right-6 z-[100] w-[340px] rounded-3xl border border-white/10 bg-slate-950/95 backdrop-blur-2xl p-5 shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h4 className="font-semibold text-lg">
-                Intervalo personalizado
-              </h4>
-
-              <button
-                onClick={() => setShowCustomModal(false)}
-                className="cursor-pointer text-slate-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm text-slate-400">
-                  Data inicial
-                </label>
-
-                <DatePartsInput
-                  value={customStartDate}
-                  onChange={setCustomStartDate}
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-sm text-slate-400">
-                  Data final
-                </label>
-
-                <DatePartsInput
-                  value={customEndDate}
-                  onChange={setCustomEndDate}
-                />
-              </div>
-            </div>
-          </div>
-        </>
-      )}
 
       <div
         ref={chartContainerRef}
-        className="h-[340px] relative overflow-visible z-50"
+        className="h-[420px] relative overflow-visible"
       >
         <ResponsiveLine
           layers={[
@@ -452,8 +403,8 @@ export default function TemporalEnergyChart({
           ]}
           data={currentChartData}
           isInteractive={false}
-          enableGridX={true}
-          enableGridY={true}
+          enableGridX
+          enableGridY
           gridXValues={12}
           theme={chartTheme}
           margin={{
@@ -468,7 +419,7 @@ export default function TemporalEnergyChart({
           yScale={{
             type: 'linear',
             min: 0,
-            max: Math.ceil(maxY * 1.2),
+            max: computedMaxY,
             stacked: false,
           }}
           axisBottom={{
@@ -479,10 +430,7 @@ export default function TemporalEnergyChart({
               .filter((_, index) => index % 2 === 0)
               .map(item => item.x),
             format: value => {
-              const item = currentChartData[0].data.find(
-                d => d.x === value
-              )
-
+              const item = currentChartData[0].data.find(d => d.x === value)
               return item?.label || ''
             },
             legendOffset: 45,
@@ -497,7 +445,7 @@ export default function TemporalEnergyChart({
           enableArea
           areaOpacity={0.15}
           enablePoints={false}
-          animate={true}
+          animate
           motionConfig="gentle"
           colors={['#3b82f6']}
           onMouseLeave={() => setActiveSliceIndex(null)}
@@ -507,27 +455,47 @@ export default function TemporalEnergyChart({
           <div
             className="absolute z-[9999] pointer-events-none"
             style={{
-              left: tooltip.x + 16,
-              top: tooltip.y - 20,
+              left: tooltipLeft,
+              top: tooltip.y - 60,
             }}
           >
-            <div className="rounded-xl bg-slate-950/95 backdrop-blur-xl px-4 py-3 shadow-2xl border border-white/10 min-w-[260px]">
-              <div className="text-xs text-slate-400 mb-2">
+            <div
+              className={`rounded-xl px-4 py-3 shadow-2xl border min-w-[260px] ${
+                isDarkMode
+                  ? 'bg-slate-950/95 border-white/10'
+                  : 'bg-white border-slate-200'
+              }`}
+            >
+              <div
+                className={`text-xs mb-2 ${
+                  isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                }`}
+              >
                 Intervalo
               </div>
 
-              <div className="text-white font-medium leading-relaxed">
+              <div
+                className={`font-medium leading-relaxed ${
+                  isDarkMode ? 'text-white' : 'text-slate-950'
+                }`}
+              >
                 {tooltip.point.intervalLabel}
               </div>
 
-              <div className="h-px bg-white/10 my-3" />
+              <div
+                className={`h-px my-3 ${
+                  isDarkMode ? 'bg-white/10' : 'bg-slate-200'
+                }`}
+              />
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">
+                <span
+                  className={isDarkMode ? 'text-slate-400' : 'text-slate-500'}
+                >
                   Consumo médio
                 </span>
 
-                <span className="text-blue-300 font-bold text-lg">
+                <span className="text-blue-400 font-bold text-lg">
                   {tooltip.point.y} kWh
                 </span>
               </div>
@@ -535,6 +503,6 @@ export default function TemporalEnergyChart({
           </div>
         )}
       </div>
-    </div>
+    </section>
   )
 }
