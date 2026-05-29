@@ -2,12 +2,99 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 
+type Mode = 'login' | 'register'
+
 export default function AuthPage() {
-  const [mode, setMode] = useState<'login' | 'register'>(
-    'login'
-  )
+  const [mode, setMode] = useState<Mode>('login')
+
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const navigate = useNavigate()
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError('')
+
+    if (!email || !password) {
+      setError('Preenche o email e a palavra-passe.')
+      return
+    }
+
+    if (mode === 'register') {
+      if (!name) {
+        setError('Preenche o nome.')
+        return
+      }
+
+      if (password !== confirmPassword) {
+        setError('As palavras-passe não coincidem.')
+        return
+      }
+    }
+
+    try {
+      setLoading(true)
+
+      const endpoint =
+        mode === 'login'
+          ? 'http://localhost:8080/api/auth/login'
+          : 'http://localhost:8080/api/auth/register'
+
+      const body =
+        mode === 'login'
+          ? {
+              email,
+              password,
+            }
+          : {
+              name,
+              email,
+              password,
+            }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (!response.ok) {
+        const message = await response.text()
+        throw new Error(message || 'Erro ao autenticar.')
+      }
+
+      const user = await response.json()
+
+      localStorage.setItem('user', JSON.stringify(user))
+
+      navigate('/home')
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Ocorreu um erro inesperado.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function switchMode() {
+    setMode(mode === 'login' ? 'register' : 'login')
+    setError('')
+    setName('')
+    setEmail('')
+    setPassword('')
+    setConfirmPassword('')
+  }
 
   return (
     <div className="min-h-screen bg-[#020617] text-white overflow-hidden flex items-center justify-center px-6 relative">
@@ -27,8 +114,7 @@ export default function AuthPage() {
               </h1>
 
               <p className="text-slate-400 mt-3">
-                Monitoriza o teu consumo energético
-                com insights inteligentes.
+                Monitoriza o teu consumo energético com insights inteligentes.
               </p>
             </div>
 
@@ -46,14 +132,7 @@ export default function AuthPage() {
                 }}
                 transition={{ duration: 0.25 }}
               >
-                <form
-                  className="space-y-5"
-                  onSubmit={e => {
-                    e.preventDefault()
-
-                    navigate('/home')
-                  }}
-                >
+                <form className="space-y-5" onSubmit={handleSubmit}>
                   {mode === 'register' && (
                     <div>
                       <label className="block text-sm text-slate-400 mb-2">
@@ -62,7 +141,9 @@ export default function AuthPage() {
 
                       <input
                         type="text"
-                        placeholder="Name"
+                        placeholder="Nome"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
                         className="w-full bg-slate-950/60 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
                       />
                     </div>
@@ -76,6 +157,8 @@ export default function AuthPage() {
                     <input
                       type="email"
                       placeholder="example@email.com"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
                       className="w-full bg-slate-950/60 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
                     />
                   </div>
@@ -88,6 +171,8 @@ export default function AuthPage() {
                     <input
                       type="password"
                       placeholder="••••••••"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
                       className="w-full bg-slate-950/60 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
                     />
                   </div>
@@ -101,6 +186,8 @@ export default function AuthPage() {
                       <input
                         type="password"
                         placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
                         className="w-full bg-slate-950/60 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
                       />
                     </div>
@@ -125,13 +212,22 @@ export default function AuthPage() {
                     </div>
                   )}
 
+                  {error && (
+                    <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                      {error}
+                    </div>
+                  )}
+
                   <button
                     type="submit"
-                    className="cursor-pointer w-full mt-2 bg-blue-500 hover:bg-blue-400 transition-all duration-300 text-white py-4 rounded-2xl font-semibold shadow-lg shadow-blue-500/20"
+                    disabled={loading}
+                    className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 w-full mt-2 bg-blue-500 hover:bg-blue-400 transition-all duration-300 text-white py-4 rounded-2xl font-semibold shadow-lg shadow-blue-500/20"
                   >
-                    {mode === 'login'
-                      ? 'Entrar'
-                      : 'Criar conta'}
+                    {loading
+                      ? 'A processar...'
+                      : mode === 'login'
+                        ? 'Entrar'
+                        : 'Criar conta'}
                   </button>
                 </form>
               </motion.div>
@@ -144,18 +240,10 @@ export default function AuthPage() {
                 ? 'Ainda não tens conta?'
                 : 'Já tens conta?'}{' '}
               <button
-                onClick={() =>
-                  setMode(
-                    mode === 'login'
-                      ? 'register'
-                      : 'login'
-                  )
-                }
+                onClick={switchMode}
                 className="cursor-pointer text-blue-400 hover:text-blue-300 transition-colors"
               >
-                {mode === 'login'
-                  ? 'Criar conta'
-                  : 'Fazer login'}
+                {mode === 'login' ? 'Criar conta' : 'Fazer login'}
               </button>
             </p>
           </div>
