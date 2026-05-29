@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ResponsiveAreaBump } from '@nivo/bump'
 import TemporalEnergyChart from './TemporalEnergyChart'
 import EnergyDistributionChart from './EnergyDistributionChart'
@@ -124,6 +125,15 @@ function Sparkline({
 }
 
 export default function EnergyDashboardHomepage() {
+
+  const navigate = useNavigate()
+
+  function handleSignOut() {
+    localStorage.removeItem('user')
+    localStorage.removeItem('token')
+    navigate('/')
+  }
+
   const generateEnergyData = (): EnergyPoint[] => {
     const data: EnergyPoint[] = []
 
@@ -157,6 +167,27 @@ export default function EnergyDashboardHomepage() {
   const [activeTopPage, setActiveTopPage] = useState<TopPage>('statistics')
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showCustomModal, setShowCustomModal] = useState(false)
+
+  const userMenuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowUserMenu(false)
+      }
+    }
+
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showUserMenu])
 
   const isDarkMode = themeMode === 'dark'
 
@@ -671,7 +702,7 @@ export default function EnergyDashboardHomepage() {
               </span>
             </button>
 
-            <div className="relative">
+            <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setShowUserMenu(value => !value)}
                 className="cursor-pointer flex items-center gap-3"
@@ -720,7 +751,7 @@ export default function EnergyDashboardHomepage() {
                   </div>
 
                   <button
-                    className={`w-full px-4 py-3 text-left text-sm ${
+                    className={`cursor-pointer w-full px-4 py-3 text-left text-sm ${
                       isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-50'
                     }`}
                   >
@@ -728,7 +759,8 @@ export default function EnergyDashboardHomepage() {
                   </button>
 
                   <button
-                    className={`w-full px-4 py-3 text-left text-sm ${
+                    onClick={handleSignOut}
+                    className={`cursor-pointer w-full px-4 py-3 text-left text-sm ${
                       isDarkMode
                         ? 'text-rose-300 hover:bg-rose-500/10'
                         : 'text-rose-600 hover:bg-rose-50'

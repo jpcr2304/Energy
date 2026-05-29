@@ -48,15 +48,8 @@ export default function AuthPage() {
 
       const body =
         mode === 'login'
-          ? {
-              email,
-              password,
-            }
-          : {
-              name,
-              email,
-              password,
-            }
+          ? { email, password }
+          : { name, email, password }
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -97,24 +90,113 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white overflow-hidden flex items-center justify-center px-6 relative">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.15),transparent_35%),radial-gradient(circle_at_bottom_left,_rgba(168,85,247,0.12),transparent_30%)]" />
+    <div className="min-h-screen overflow-hidden bg-[#020617] text-white">
+      <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="relative hidden overflow-hidden lg:block">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.35),transparent_32%),radial-gradient(circle_at_80%_70%,rgba(34,197,94,0.22),transparent_30%),linear-gradient(135deg,#020617_0%,#0f172a_45%,#172554_100%)]" />
 
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 w-full max-w-md"
-      >
-        <div className="rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-2xl shadow-2xl overflow-hidden">
-          <div className="p-8">
-            <div className="mb-8">
-              <h1 className="text-4xl font-bold tracking-tight">
+          <div className="absolute left-[-120px] top-[-120px] h-96 w-96 rounded-full bg-blue-500/20 blur-3xl" />
+          <div className="absolute bottom-[-160px] right-[-120px] h-[420px] w-[420px] rounded-full bg-emerald-400/10 blur-3xl" />
+
+          <div className="absolute inset-0 opacity-25">
+            <div className="absolute left-16 top-24 h-px w-[520px] rotate-12 bg-gradient-to-r from-transparent via-blue-300 to-transparent" />
+            <div className="absolute left-32 top-64 h-px w-[620px] -rotate-6 bg-gradient-to-r from-transparent via-cyan-300 to-transparent" />
+            <div className="absolute bottom-40 left-10 h-px w-[700px] rotate-[-14deg] bg-gradient-to-r from-transparent via-emerald-300 to-transparent" />
+            <div className="absolute left-64 top-20 h-[620px] w-px rotate-12 bg-gradient-to-b from-transparent via-blue-300 to-transparent" />
+            <div className="absolute right-36 top-10 h-[680px] w-px rotate-[-8deg] bg-gradient-to-b from-transparent via-cyan-300 to-transparent" />
+          </div>
+
+          <motion.div
+            animate={{ opacity: [0.35, 1, 0.35], scale: [1, 1.15, 1] }}
+            transition={{ duration: 3.2, repeat: Infinity }}
+            className="absolute left-[18%] top-[24%] h-3 w-3 rounded-full bg-cyan-300 shadow-[0_0_30px_rgba(103,232,249,0.95)]"
+          />
+
+          <motion.div
+            animate={{ opacity: [0.3, 1, 0.3], scale: [1, 1.2, 1] }}
+            transition={{ duration: 2.7, repeat: Infinity, delay: 0.6 }}
+            className="absolute right-[22%] top-[42%] h-3 w-3 rounded-full bg-blue-300 shadow-[0_0_32px_rgba(147,197,253,0.95)]"
+          />
+
+          <motion.div
+            animate={{ opacity: [0.25, 1, 0.25], scale: [1, 1.25, 1] }}
+            transition={{ duration: 3.6, repeat: Infinity, delay: 1 }}
+            className="absolute bottom-[24%] left-[36%] h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_32px_rgba(110,231,183,0.95)]"
+          />
+
+          <div className="relative z-10 flex h-full items-center px-14 xl:px-20">
+            <div className="max-w-2xl">
+              <motion.h1
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="text-5xl font-bold leading-tight xl:text-6xl"
+              >
+                Controla a energia.
+                <span className="block bg-gradient-to-r from-cyan-200 via-blue-300 to-emerald-200 bg-clip-text text-transparent">
+                  Reduz desperdício.
+                </span>
+              </motion.h1>
+
+              <motion.p
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+                className="mt-6 max-w-xl text-lg leading-8 text-slate-300"
+              >
+                Acompanha consumos, deteta padrões e transforma dados
+                energéticos em decisões simples, rápidas e inteligentes.
+              </motion.p>
+
+              <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="mt-10 grid max-w-xl grid-cols-3 gap-4"
+              >
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
+                  <p className="text-sm text-slate-300">Eficiência</p>
+                  <p className="mt-2 text-3xl font-semibold">+27%</p>
+                </div>
+
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
+                  <p className="text-sm text-slate-300">Monitorização</p>
+                  <p className="mt-2 text-3xl font-semibold">24/7</p>
+                </div>
+
+                <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
+                  <p className="text-sm text-slate-300">Dados</p>
+                  <p className="mt-2 text-3xl font-semibold">Real-time</p>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        <section className="relative flex items-center justify-center px-6 py-10 lg:bg-slate-950">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_32%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.10),transparent_26%)]" />
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45 }}
+            className="relative z-10 w-full max-w-md"
+          >
+            <div className="mb-10">
+              <p className="text-sm font-medium uppercase tracking-[0.25em] text-blue-300/80">
                 Energy Analytics
-              </h1>
+              </p>
 
-              <p className="text-slate-400 mt-3">
-                Monitoriza o teu consumo energético com insights inteligentes.
+              <h2 className="mt-4 text-4xl font-bold tracking-tight">
+                {mode === 'login'
+                  ? 'Bem-vindo de volta'
+                  : 'Cria a tua conta'}
+              </h2>
+
+              <p className="mt-4 text-slate-400">
+                {mode === 'login'
+                  ? 'Entra para aceder ao teu dashboard energético.'
+                  : 'Regista-te para começares a monitorizar os teus consumos.'}
               </p>
             </div>
 
@@ -135,7 +217,7 @@ export default function AuthPage() {
                 <form className="space-y-5" onSubmit={handleSubmit}>
                   {mode === 'register' && (
                     <div>
-                      <label className="block text-sm text-slate-400 mb-2">
+                      <label className="mb-2 block text-sm text-slate-400">
                         Nome
                       </label>
 
@@ -144,13 +226,13 @@ export default function AuthPage() {
                         placeholder="Nome"
                         value={name}
                         onChange={e => setName(e.target.value)}
-                        className="w-full bg-slate-950/60 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
+                        className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-4 outline-none transition-all placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                       />
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-sm text-slate-400 mb-2">
+                    <label className="mb-2 block text-sm text-slate-400">
                       Email
                     </label>
 
@@ -159,12 +241,12 @@ export default function AuthPage() {
                       placeholder="example@email.com"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
-                      className="w-full bg-slate-950/60 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-4 outline-none transition-all placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm text-slate-400 mb-2">
+                    <label className="mb-2 block text-sm text-slate-400">
                       Palavra-passe
                     </label>
 
@@ -173,13 +255,13 @@ export default function AuthPage() {
                       placeholder="••••••••"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      className="w-full bg-slate-950/60 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-4 outline-none transition-all placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                     />
                   </div>
 
                   {mode === 'register' && (
                     <div>
-                      <label className="block text-sm text-slate-400 mb-2">
+                      <label className="mb-2 block text-sm text-slate-400">
                         Confirmar palavra-passe
                       </label>
 
@@ -188,7 +270,7 @@ export default function AuthPage() {
                         placeholder="••••••••"
                         value={confirmPassword}
                         onChange={e => setConfirmPassword(e.target.value)}
-                        className="w-full bg-slate-950/60 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
+                        className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-4 outline-none transition-all placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                       />
                     </div>
                   )}
@@ -205,7 +287,7 @@ export default function AuthPage() {
 
                       <button
                         type="button"
-                        className="cursor-pointer text-blue-400 hover:text-blue-300 transition-colors"
+                        className="cursor-pointer text-blue-400 transition-colors hover:text-blue-300"
                       >
                         Esqueceste-te da password?
                       </button>
@@ -221,7 +303,7 @@ export default function AuthPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 w-full mt-2 bg-blue-500 hover:bg-blue-400 transition-all duration-300 text-white py-4 rounded-2xl font-semibold shadow-lg shadow-blue-500/20"
+                    className="mt-2 w-full cursor-pointer rounded-2xl bg-blue-500 py-4 font-semibold text-white shadow-lg shadow-blue-500/20 transition-all duration-300 hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {loading
                       ? 'A processar...'
@@ -232,23 +314,21 @@ export default function AuthPage() {
                 </form>
               </motion.div>
             </AnimatePresence>
-          </div>
 
-          <div className="border-t border-white/10 px-8 py-5 bg-white/[0.03]">
-            <p className="text-sm text-center text-slate-400">
+            <p className="mt-8 text-center text-sm text-slate-400">
               {mode === 'login'
                 ? 'Ainda não tens conta?'
                 : 'Já tens conta?'}{' '}
               <button
                 onClick={switchMode}
-                className="cursor-pointer text-blue-400 hover:text-blue-300 transition-colors"
+                className="cursor-pointer text-blue-400 transition-colors hover:text-blue-300"
               >
                 {mode === 'login' ? 'Criar conta' : 'Fazer login'}
               </button>
             </p>
-          </div>
-        </div>
-      </motion.div>
+          </motion.div>
+        </section>
+      </div>
     </div>
   )
 }
