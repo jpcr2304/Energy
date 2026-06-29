@@ -1,0 +1,1 @@
+"C:\Program Files\Mosquitto\mosquitto_sub.exe" -h localhost -t "#" -v

@@ -159,7 +159,48 @@ export default function EnergyDashboardHomepage() {
     return data
   }
 
-  const energyData = useMemo(() => generateEnergyData(), [])
+  const generatedEnergyData = useMemo(() => generateEnergyData(), [])
+
+  const [backendEnergyData, setBackendEnergyData] = useState<EnergyPoint[]>([])
+
+  useEffect(() => {
+    const fetchEnergyData = () => {
+      fetch('http://localhost:8080/api/energy/points')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to fetch energy data')
+          }
+
+          return response.json()
+        })
+        .then(data => {
+          const parsedData: EnergyPoint[] = data.map(
+            (item: { timestamp: string; accumulated: number }) => ({
+              timestamp: new Date(item.timestamp),
+              accumulated: item.accumulated,
+            })
+          )
+
+          setBackendEnergyData(parsedData)
+        })
+        .catch(() => {
+          setBackendEnergyData([])
+        })
+    }
+
+    fetchEnergyData()
+
+    const interval = window.setInterval(fetchEnergyData, 10000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [])
+
+  const energyData =
+    backendEnergyData.length > 1
+      ? backendEnergyData
+      : generatedEnergyData
 
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [activeView, setActiveView] = useState<ActiveView>('temporal')
