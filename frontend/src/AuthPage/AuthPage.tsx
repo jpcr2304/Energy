@@ -43,8 +43,8 @@ export default function AuthPage() {
 
       const endpoint =
         mode === 'login'
-          ? 'http://localhost:8080/api/auth/login'
-          : 'http://localhost:8080/api/auth/register'
+          ? '/api/auth/login'
+          : '/api/auth/register'
 
       const body =
         mode === 'login'

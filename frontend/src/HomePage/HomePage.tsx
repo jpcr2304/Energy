@@ -165,7 +165,7 @@ export default function EnergyDashboardHomepage() {
 
   useEffect(() => {
     const fetchEnergyData = () => {
-      fetch('http://localhost:8080/api/energy/points')
+      fetch('/api/energy/points')
         .then(response => {
           if (!response.ok) {
             throw new Error('Failed to fetch energy data')
