@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ResponsiveAreaBump } from '@nivo/bump'
+import { AnimatePresence, motion } from 'framer-motion'
 import TemporalEnergyChart from './TemporalEnergyChart'
 import EnergyDistributionChart from './EnergyDistributionChart'
 
@@ -162,6 +163,7 @@ export default function EnergyDashboardHomepage() {
   const generatedEnergyData = useMemo(() => generateEnergyData(), [])
 
   const [backendEnergyData, setBackendEnergyData] = useState<EnergyPoint[]>([])
+  const [isEnergyDataLoading, setIsEnergyDataLoading] = useState(true)
 
   useEffect(() => {
     const fetchEnergyData = () => {
@@ -186,6 +188,9 @@ export default function EnergyDashboardHomepage() {
         .catch(() => {
           setBackendEnergyData([])
         })
+        .finally(() => {
+          setIsEnergyDataLoading(false)
+        })
     }
 
     fetchEnergyData()
@@ -197,19 +202,42 @@ export default function EnergyDashboardHomepage() {
     }
   }, [])
 
-  const energyData =
-    backendEnergyData.length > 1
-      ? backendEnergyData
-      : generatedEnergyData
+  const hasEnoughRealData = backendEnergyData.length >= 25
+
+  const energyData = hasEnoughRealData
+    ? backendEnergyData
+    : generatedEnergyData
+
+  const isShowingFictitiousData = !hasEnoughRealData
+  const shouldShowEnergyLoading = isEnergyDataLoading
 
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
-  const [activeView, setActiveView] = useState<ActiveView>('temporal')
   const [selectedRange, setSelectedRange] = useState<Range>('24h')
   const [activeTopPage, setActiveTopPage] = useState<TopPage>('statistics')
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showCustomModal, setShowCustomModal] = useState(false)
 
   const userMenuRef = useRef<HTMLDivElement | null>(null)
+
+  const graphViews: ActiveView[] = [
+    'temporal',
+    'distribution',
+    'daily',
+    'insights',
+  ]
+
+  const [graphState, setGraphState] = useState<{
+    view: ActiveView
+    direction: number
+  }>({
+    view: 'temporal',
+    direction: 1,
+  })
+
+  const [isGraphAnimating, setIsGraphAnimating] = useState(false)
+
+  const activeView = graphState.view
+  const slideDirection = graphState.direction
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -418,8 +446,8 @@ export default function EnergyDashboardHomepage() {
   const subtleBorderClasses = isDarkMode ? 'border-white/10' : 'border-slate-200'
 
   const statsCardClasses = isDarkMode
-    ? 'rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl hover:bg-white/[0.07] transition-all'
-    : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all'
+    ? 'rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl hover:bg-white/[0.07]'
+    : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md'
 
   const tabContainerClasses = isDarkMode
     ? 'flex flex-wrap gap-2 rounded-2xl bg-white/5 border border-white/10 p-1 w-fit'
@@ -429,8 +457,22 @@ export default function EnergyDashboardHomepage() {
     ? 'flex gap-2 rounded-2xl bg-white/5 border border-white/10 p-1 w-fit'
     : 'flex gap-2 rounded-2xl bg-white border border-slate-200 p-1 w-fit'
 
-  const renderMainContent = () => {
-    if (activeView === 'temporal') {
+  const changeActiveView = (nextView: ActiveView) => {
+    if (nextView === activeView || isGraphAnimating) {
+      return
+    }
+
+    const currentIndex = graphViews.indexOf(activeView)
+    const nextIndex = graphViews.indexOf(nextView)
+
+    setGraphState({
+      view: nextView,
+      direction: nextIndex > currentIndex ? 1 : -1,
+    })
+  }
+
+  const renderMainContent = (view: ActiveView) => {
+    if (view === 'temporal') {
       return (
         <TemporalEnergyChart
           energyData={energyData}
@@ -443,7 +485,7 @@ export default function EnergyDashboardHomepage() {
       )
     }
 
-    if (activeView === 'distribution') {
+    if (view === 'distribution') {
       return (
         <EnergyDistributionChart
           energyData={energyData}
@@ -456,7 +498,7 @@ export default function EnergyDashboardHomepage() {
       )
     }
 
-    if (activeView === 'daily') {
+    if (view === 'daily') {
       return (
         <section>
           <div className="mb-6">
@@ -647,6 +689,21 @@ export default function EnergyDashboardHomepage() {
         </div>
       </section>
     )
+  }
+
+  const graphVariants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? 80 : -80,
+      opacity: 0,
+    }),
+    center: {
+      x: 0,
+      opacity: 1,
+    },
+    exit: (direction: number) => ({
+      x: direction > 0 ? -80 : 80,
+      opacity: 0,
+    }),
   }
 
   return (
@@ -886,16 +943,31 @@ export default function EnergyDashboardHomepage() {
                   ].map(item => (
                     <button
                       key={item.id}
-                      onClick={() => setActiveView(item.id as ActiveView)}
-                      className={`cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                      disabled={isGraphAnimating}
+                      onClick={() => changeActiveView(item.id as ActiveView)}
+                      className={`relative isolate cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
                         activeView === item.id
-                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                          ? 'text-white'
                           : isDarkMode
                             ? 'text-slate-400 hover:text-white'
                             : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
-                      {item.label}
+                      {activeView === item.id && (
+                        <motion.span
+                          layoutId="active-graph-tab"
+                          className="absolute inset-0 z-0 rounded-xl bg-blue-600 shadow-lg shadow-blue-500/20"
+                          transition={{
+                            type: 'spring',
+                            stiffness: 450,
+                            damping: 35,
+                          }}
+                        />
+                      )}
+
+                      <span className="relative z-10">
+                        {item.label}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -911,22 +983,91 @@ export default function EnergyDashboardHomepage() {
                           setShowCustomModal(true)
                         }
                       }}
-                      className={`cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                      className={`relative isolate cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
                         selectedRange === range
-                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                          ? 'text-white'
                           : isDarkMode
                             ? 'text-slate-400 hover:text-white'
                             : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
-                      {range === 'custom' ? 'Custom' : range}
+                      {selectedRange === range && (
+                        <motion.span
+                          layoutId="active-range-tab"
+                          className="absolute inset-0 z-0 rounded-xl bg-blue-600 shadow-lg shadow-blue-500/20"
+                          transition={{
+                            type: 'spring',
+                            stiffness: 450,
+                            damping: 35,
+                          }}
+                        />
+                      )}
+
+                      <span className="relative z-10">
+                        {range === 'custom' ? 'Custom' : range}
+                      </span>
                     </button>
                   ))}
                 </div>
               </section>
 
               <section className="pt-2">
-                {renderMainContent()}
+                {!isEnergyDataLoading && isShowingFictitiousData && (
+                  <div
+                    className={`mb-5 rounded-2xl border px-5 py-4 ${
+                      isDarkMode
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                        : 'border-amber-200 bg-amber-50 text-amber-800'
+                    }`}
+                  >
+                    <p className="font-semibold">
+                      Not enough real data yet
+                    </p>
+
+                    <p className="mt-1 text-sm opacity-90">
+                      The displayed data is generated for demonstration purposes. Real data will be available after sufficient usage.
+                    </p>
+                  </div>
+                )}
+
+                {shouldShowEnergyLoading ? (
+                  <div
+                    className={`h-[460px] rounded-2xl border flex items-center justify-center ${
+                      isDarkMode
+                        ? 'border-white/10 bg-white/5 text-slate-400'
+                        : 'border-slate-200 bg-white text-slate-500'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="h-8 w-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+
+                      <p className="text-sm font-medium">
+                        Loading energy data...
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative overflow-visible">
+                    <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
+                      <motion.div
+                        key={activeView}
+                        custom={slideDirection}
+                        variants={graphVariants}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        onAnimationStart={() => setIsGraphAnimating(true)}
+                        onAnimationComplete={() => setIsGraphAnimating(false)}
+                        transition={{
+                          duration: 0.18,
+                          ease: 'easeInOut',
+                        }}
+                      >
+                        {renderMainContent(activeView)}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                )}
               </section>
             </>
           )}

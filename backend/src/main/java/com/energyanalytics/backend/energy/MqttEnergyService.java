@@ -8,6 +8,7 @@ import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.PreDestroy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -19,6 +20,8 @@ public class MqttEnergyService {
     private final EnergyReadingRepository energyReadingRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private MqttClient client;
+
     @Value("${mqtt.broker-url:tcp://localhost:1883}")
     private String brokerUrl;
 
@@ -27,7 +30,7 @@ public class MqttEnergyService {
 
     @PostConstruct
     public void connect() throws MqttException {
-        MqttClient client = new MqttClient(
+        client = new MqttClient(
                 brokerUrl,
                 "energy-backend-" + MqttClient.generateClientId(),
                 new MemoryPersistence());
@@ -137,5 +140,17 @@ public class MqttEnergyService {
         return json.has(field) && !json.get(field).isNull()
                 ? json.get(field).asDouble()
                 : null;
+    }
+
+    @PreDestroy
+    public void disconnect() {
+        try {
+            if (client != null && client.isConnected()) {
+                client.disconnect();
+                client.close();
+            }
+        } catch (MqttException e) {
+            System.out.println("Failed to close MQTT client: " + e.getMessage());
+        }
     }
 }
