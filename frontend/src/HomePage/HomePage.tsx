@@ -202,15 +202,6 @@ export default function EnergyDashboardHomepage() {
     }
   }, [])
 
-  const hasEnoughRealData = backendEnergyData.length >= 25
-
-  const energyData = hasEnoughRealData
-    ? backendEnergyData
-    : generatedEnergyData
-
-  const isShowingFictitiousData = !hasEnoughRealData
-  const shouldShowEnergyLoading = isEnergyDataLoading
-
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [selectedRange, setSelectedRange] = useState<Range>('24h')
   const [activeTopPage, setActiveTopPage] = useState<TopPage>('statistics')
@@ -271,6 +262,88 @@ export default function EnergyDashboardHomepage() {
   const [customEndDate, setCustomEndDate] = useState(() => {
     return formatDateInput(new Date())
   })
+
+  const getRangeWindow = (range: Range) => {
+    const now = new Date()
+    let start = new Date(now)
+
+    if (range === '24h') {
+      start = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    }
+
+    if (range === '7d') {
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    }
+
+    if (range === '30d') {
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    }
+
+    if (range === 'custom') {
+      const [startYear, startMonth, startDay] =
+        customStartDate.split('-').map(Number)
+
+      const [endYear, endMonth, endDay] =
+        customEndDate.split('-').map(Number)
+
+      const customStart = new Date(
+        startYear,
+        startMonth - 1,
+        startDay,
+        0,
+        0,
+        0,
+        0
+      )
+
+      const customEnd = new Date(
+        endYear,
+        endMonth - 1,
+        endDay,
+        23,
+        59,
+        59,
+        999
+      )
+
+      return {
+        start: customStart,
+        end: customEnd,
+      }
+    }
+
+    return {
+      start,
+      end: now,
+    }
+  }
+
+  const hasEnoughRealDataForSelectedRange = useMemo(() => {
+    if (isEnergyDataLoading) {
+      return false
+    }
+
+    const { start, end } = getRangeWindow(selectedRange)
+
+    const rangeData = backendEnergyData.filter(
+      item => item.timestamp >= start && item.timestamp <= end
+    )
+
+    return rangeData.length >= 25
+  }, [
+    backendEnergyData,
+    selectedRange,
+    customStartDate,
+    customEndDate,
+    isEnergyDataLoading,
+  ])
+
+  const energyData = hasEnoughRealDataForSelectedRange
+    ? backendEnergyData
+    : generatedEnergyData
+
+  const isShowingFictitiousData = !hasEnoughRealDataForSelectedRange
+  const shouldShowEnergyLoading = isEnergyDataLoading
 
   const DatePartsInput = ({
     value,
@@ -1021,11 +1094,11 @@ export default function EnergyDashboardHomepage() {
                     }`}
                   >
                     <p className="font-semibold">
-                      Not enough real data yet
+                      Not enough real data for this range yet
                     </p>
 
                     <p className="mt-1 text-sm opacity-90">
-                      The displayed data is generated for demonstration purposes. Real data will be available after sufficient usage.
+                      The displayed data is generated for demonstration purposes. Real data will be shown after enough data has been collected for the selected period.
                     </p>
                   </div>
                 )}

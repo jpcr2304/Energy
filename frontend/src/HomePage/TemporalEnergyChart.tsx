@@ -17,55 +17,50 @@ type TemporalEnergyChartProps = {
   isDarkMode: boolean
 }
 
-function normalizeTo24Intervals(
-  data: EnergyPoint[],
-  forceNormalize = false
-): EnergyPoint[] {
-  if (data.length === 0) {
-    return []
+function getSelectedRangeWindow(
+  selectedRange: Range,
+  customStartDate: string,
+  customEndDate: string
+) {
+  const now = new Date()
+  let start = new Date(now)
+
+  if (selectedRange === '24h') {
+    start = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   }
 
-  if (data.length === 1) {
-    return data
+  if (selectedRange === '7d') {
+    start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   }
 
-  if (!forceNormalize && data.length <= 25) {
-    return data
+  if (selectedRange === '30d') {
+    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   }
 
-  const result: EnergyPoint[] = []
+  if (selectedRange === 'custom') {
+    const [startYear, startMonth, startDay] =
+      customStartDate.split('-').map(Number)
 
-  const startTime = data[0].timestamp.getTime()
-  const endTime = data[data.length - 1].timestamp.getTime()
+    const [endYear, endMonth, endDay] =
+      customEndDate.split('-').map(Number)
 
-  if (startTime === endTime) {
-    return data
+    return {
+      start: new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0),
+      end: new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999),
+    }
   }
 
-  const intervalDuration = (endTime - startTime) / 24
-
-  result.push({
-    timestamp: new Date(startTime),
-    accumulated: data[0].accumulated,
-  })
-
-  for (let i = 0; i < 24; i++) {
-    const intervalEnd = startTime + (i + 1) * intervalDuration
-
-    const pointsBeforeOrAtEnd = data.filter(
-      item => item.timestamp.getTime() <= intervalEnd
-    )
-
-    const endPoint =
-      pointsBeforeOrAtEnd[pointsBeforeOrAtEnd.length - 1] ?? data[0]
-
-    result.push({
-      timestamp: new Date(intervalEnd),
-      accumulated: endPoint.accumulated,
-    })
+  return {
+    start,
+    end: now,
   }
+}
 
-  return result
+function getMaxAllowedGapHours(selectedRange: Range) {
+  if (selectedRange === '24h') return 2
+  if (selectedRange === '7d') return 8
+  if (selectedRange === '30d') return 24
+  return 8
 }
 
 export default function TemporalEnergyChart({
@@ -86,139 +81,149 @@ export default function TemporalEnergyChart({
   } | null>(null)
 
   const filteredData = useMemo(() => {
-    const now = new Date()
+    const { start, end } = getSelectedRangeWindow(
+      selectedRange,
+      customStartDate,
+      customEndDate
+    )
 
-    let startDate = new Date()
-
-    if (selectedRange === '24h') {
-      startDate = new Date(now.getTime() - 25 * 60 * 60 * 1000)
-    }
-
-    if (selectedRange === '7d') {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    }
-
-    if (selectedRange === '30d') {
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-    }
-
-    let filtered: EnergyPoint[] = []
-
-    if (selectedRange === 'custom') {
-      const [startYear, startMonth, startDay] =
-        customStartDate.split('-').map(Number)
-
-      const start = new Date(
-        startYear,
-        startMonth - 1,
-        startDay,
-        0,
-        0,
-        0,
-        0
-      )
-
-      const [endYear, endMonth, endDay] =
-        customEndDate.split('-').map(Number)
-
-      const end = new Date(
-        endYear,
-        endMonth - 1,
-        endDay,
-        23,
-        59,
-        59,
-        999
-      )
-
-      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
-        return []
-      }
-
-      filtered = energyData.filter(
-        item => item.timestamp >= start && item.timestamp <= end
-      )
-    } else {
-      filtered = energyData.filter(item => item.timestamp >= startDate)
-    }
-
-    if (filtered.length === 0) {
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
       return []
     }
 
-    return normalizeTo24Intervals(filtered, selectedRange === 'custom')
+    return energyData
+      .filter(item => item.timestamp >= start && item.timestamp <= end)
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
   }, [selectedRange, energyData, customStartDate, customEndDate])
 
   const currentChartData = useMemo(() => {
-    return [
-      {
-        id: 'Energia',
-        data: filteredData.map((item, index) => {
-          const next = filteredData[index + 1]
-          const previous = filteredData[index - 1]
+    if (filteredData.length < 2) {
+      return [
+        {
+          id: 'Energia',
+          data: [],
+        },
+      ]
+    }
 
-          const startLabel =
-            item.timestamp.toLocaleDateString('pt-PT', {
-              day: '2-digit',
-              month: '2-digit',
-            }) +
-            ' ' +
-            item.timestamp.toLocaleTimeString('pt-PT', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
+    const maxAllowedGapHours = getMaxAllowedGapHours(selectedRange)
 
-          const endLabel = next
-            ? next.timestamp.toLocaleDateString('pt-PT', {
-                day: '2-digit',
-                month: '2-digit',
-              }) +
-              ' ' +
-              next.timestamp.toLocaleTimeString('pt-PT', {
+    const firstAvailablePoint = filteredData[0]
+    const lastAvailablePoint = filteredData[filteredData.length - 1]
+
+    const startTime = firstAvailablePoint.timestamp.getTime()
+    const endTime = lastAvailablePoint.timestamp.getTime()
+
+    if (startTime === endTime) {
+      return [
+        {
+          id: 'Energia',
+          data: [],
+        },
+      ]
+    }
+
+    const intervalDuration = (endTime - startTime) / 24
+
+    const chartPoints = Array.from({ length: 25 }).map((_, index) => {
+      const intervalStart = new Date(startTime + index * intervalDuration)
+      const intervalEnd = new Date(startTime + (index + 1) * intervalDuration)
+
+      const pointsInsideInterval = filteredData.filter(
+        item =>
+          item.timestamp >= intervalStart &&
+          item.timestamp <= intervalEnd
+      )
+
+      const startLabel =
+        intervalStart.toLocaleDateString('pt-PT', {
+          day: '2-digit',
+          month: '2-digit',
+        }) +
+        ' ' +
+        intervalStart.toLocaleTimeString('pt-PT', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+
+      const endLabel =
+        intervalEnd.toLocaleDateString('pt-PT', {
+          day: '2-digit',
+          month: '2-digit',
+        }) +
+        ' ' +
+        intervalEnd.toLocaleTimeString('pt-PT', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+
+      let y = 0
+      let hasMissingData = false
+
+      if (pointsInsideInterval.length >= 2) {
+        const firstPoint = pointsInsideInterval[0]
+        const lastPoint = pointsInsideInterval[pointsInsideInterval.length - 1]
+
+        const durationHours =
+          (lastPoint.timestamp.getTime() - firstPoint.timestamp.getTime()) /
+          (1000 * 60 * 60)
+
+        const consumption = lastPoint.accumulated - firstPoint.accumulated
+
+        if (
+          durationHours > 0 &&
+          durationHours <= maxAllowedGapHours &&
+          consumption >= 0
+        ) {
+          y = Number(consumption.toFixed(2))
+        } else {
+          y = 0
+          hasMissingData = true
+        }
+      } else {
+        y = 0
+        hasMissingData = true
+      }
+
+      return {
+        x: `${index}`,
+        label:
+          selectedRange === '24h'
+            ? intervalStart.toLocaleTimeString('pt-PT', {
                 hour: '2-digit',
                 minute: '2-digit',
               })
-            : startLabel
+            : intervalStart.toLocaleDateString('pt-PT', {
+                day: '2-digit',
+                month: '2-digit',
+              }),
+        intervalLabel: `${startLabel} → ${endLabel}`,
+        y,
+        hasMissingData,
+      }
+    })
 
-          let y = 0
+    if (chartPoints.length > 1) {
+      const lastIndex = chartPoints.length - 1
+      const previousPoint = chartPoints[lastIndex - 1]
 
-          if (next) {
-            y = Number(
-              (
-                (next.accumulated - item.accumulated) /
-                ((next.timestamp.getTime() - item.timestamp.getTime()) /
-                  (1000 * 60 * 60))
-              ).toFixed(1)
-            )
-          } else if (previous) {
-            y = Number(
-              (
-                (item.accumulated - previous.accumulated) /
-                ((item.timestamp.getTime() - previous.timestamp.getTime()) /
-                  (1000 * 60 * 60))
-              ).toFixed(1)
-            )
-          }
+      chartPoints[lastIndex] = {
+        ...chartPoints[lastIndex],
+        y: previousPoint.y,
+        hasMissingData: previousPoint.hasMissingData,
+      }
+    }
 
-          return {
-            x: `${index}`,
-            label:
-              selectedRange === '24h'
-                ? item.timestamp.toLocaleTimeString('pt-PT', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : item.timestamp.toLocaleDateString('pt-PT', {
-                    day: '2-digit',
-                    month: '2-digit',
-                  }),
-            intervalLabel: `${startLabel} → ${endLabel}`,
-            y,
-          }
-        }),
+    return [
+      {
+        id: 'Energia',
+        data: chartPoints,
       },
     ]
-  }, [filteredData, selectedRange])
+  }, [
+    filteredData,
+    selectedRange,
+  ])
 
   const chartTitle = useMemo(() => {
     if (selectedRange === '24h') return 'Últimas 24 horas'
@@ -317,12 +322,13 @@ export default function TemporalEnergyChart({
   const yValues = currentChartData[0].data
     .slice(0, -1)
     .map(point => point.y)
+    .filter((value): value is number => typeof value === 'number')
 
   const maxY = yValues.length > 0 ? Math.max(...yValues) : 0
   const computedMaxY = Math.max(1, Math.ceil(maxY * 1.2))
 
-  const tooltipWidth = 256
-  const tooltipOffset = 16
+  const tooltipWidth = tooltip?.point.hasMissingData ? 320 : 260
+  const tooltipOffset = 20
 
   const shouldShowTooltipOnLeft =
     tooltip &&
@@ -331,7 +337,7 @@ export default function TemporalEnergyChart({
       tooltip.x +
       tooltipOffset +
       tooltipWidth >
-      window.innerWidth - 16
+      window.innerWidth - 50
 
   const tooltipLeft = tooltip
     ? shouldShowTooltipOnLeft
@@ -437,7 +443,7 @@ export default function TemporalEnergyChart({
             legendPosition: 'middle',
           }}
           axisLeft={{
-            legend: 'kWh/h',
+            legend: 'kWh',
             legendOffset: -45,
             legendPosition: 'middle',
           }}
@@ -460,7 +466,7 @@ export default function TemporalEnergyChart({
             }}
           >
             <div
-              className={`rounded-xl px-4 py-3 shadow-2xl border min-w-[260px] ${
+              className={`rounded-xl px-4 py-3 shadow-2xl border ${tooltip.point.hasMissingData ? 'min-w-[320px]' : 'min-w-[260px]'} ${
                 isDarkMode
                   ? 'bg-slate-950/95 border-white/10'
                   : 'bg-white border-slate-200'
@@ -488,15 +494,17 @@ export default function TemporalEnergyChart({
                 }`}
               />
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-6">
                 <span
-                  className={isDarkMode ? 'text-slate-400' : 'text-slate-500'}
+                  className={`whitespace-nowrap ${
+                    isDarkMode ? 'text-slate-400' : 'text-slate-500'
+                  }`}
                 >
-                  Consumo médio
+                  Consumption
                 </span>
 
-                <span className="text-blue-400 font-bold text-lg">
-                  {tooltip.point.y} kWh
+                <span className="text-blue-400 font-bold text-lg whitespace-nowrap text-right">
+                  {tooltip.point.hasMissingData ? 'Not enough data' : `${tooltip.point.y} kWh`}
                 </span>
               </div>
             </div>
