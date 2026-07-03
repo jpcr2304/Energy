@@ -4,6 +4,7 @@ import { ResponsiveAreaBump } from '@nivo/bump'
 import { AnimatePresence, motion } from 'framer-motion'
 import TemporalEnergyChart from './TemporalEnergyChart'
 import EnergyDistributionChart from './EnergyDistributionChart'
+import EnergyStatsCards from './EnergyStatsCards'
 
 type EnergyPoint = {
   timestamp: Date
@@ -67,60 +68,6 @@ function ChevronDownIcon({ className = '' }: { className?: string }) {
       strokeLinejoin="round"
     >
       <path d="m6 9 6 6 6-6" />
-    </svg>
-  )
-}
-
-function Sparkline({
-  values,
-  color,
-}: {
-  values: number[]
-  color: string
-}) {
-  const width = 110
-  const height = 42
-  const max = Math.max(...values)
-  const min = Math.min(...values)
-  const range = max - min || 1
-
-  const points = values
-    .map((value, index) => {
-      const x = (index / (values.length - 1)) * width
-      const y = height - ((value - min) / range) * height
-      return `${x},${y}`
-    })
-    .join(' ')
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="h-11 w-28 overflow-visible"
-    >
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {values.map((value, index) => {
-        const x = (index / (values.length - 1)) * width
-        const y = height - ((value - min) / range) * height
-
-        return (
-          <circle
-            key={index}
-            cx={x}
-            cy={y}
-            r="2.5"
-            fill={color}
-            className="opacity-90"
-          />
-        )
-      })}
     </svg>
   )
 }
@@ -441,37 +388,6 @@ export default function EnergyDashboardHomepage() {
       </div>
     )
   }
-
-  const stats = [
-    {
-      title: 'Consumo Hoje',
-      value: '48.2 kWh',
-      growth: '+12%',
-      color: '#22c55e',
-      sparkline: [12, 18, 14, 21, 25, 22, 31, 28, 36],
-    },
-    {
-      title: 'Pico Máximo',
-      value: '7.1 kWh',
-      growth: '+5%',
-      color: '#3b82f6',
-      sparkline: [3, 4, 5, 4.2, 6, 5.4, 7.1, 6.2, 6.8],
-    },
-    {
-      title: 'Custo Estimado',
-      value: '€132',
-      growth: '-8%',
-      color: '#f43f5e',
-      sparkline: [150, 148, 145, 141, 139, 137, 134, 133, 132],
-    },
-    {
-      title: 'Eficiência',
-      value: '92%',
-      growth: '+3%',
-      color: '#a855f7',
-      sparkline: [81, 83, 86, 84, 88, 89, 91, 90, 92],
-    },
-  ]
 
   const chartTheme = {
     text: {
@@ -960,49 +876,11 @@ export default function EnergyDashboardHomepage() {
                 </p>
               </div>
 
-              <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-                {stats.map(item => (
-                  <div
-                    key={item.title}
-                    className={statsCardClasses}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p
-                          className={`text-xs uppercase tracking-wide font-semibold ${mutedTextClasses}`}
-                        >
-                          {item.title}
-                        </p>
-
-                        <h3 className="text-3xl font-bold mt-4 whitespace-nowrap">
-                          {item.value}
-                        </h3>
-                      </div>
-
-                      <Sparkline
-                        values={item.sparkline}
-                        color={item.color}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between mt-4">
-                      <span className={`text-sm ${mutedTextClasses}`}>
-                        Variação
-                      </span>
-
-                      <span
-                        className={`font-bold ${
-                          item.growth.startsWith('-')
-                            ? 'text-rose-500'
-                            : 'text-emerald-400'
-                        }`}
-                      >
-                        {item.growth}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </section>
+              <EnergyStatsCards
+                backendEnergyData={energyData}
+                mutedTextClasses={mutedTextClasses}
+                statsCardClasses={statsCardClasses}
+              />
 
               <section
                 className={`flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-8 border-t pt-6 ${subtleBorderClasses}`}
