@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ResponsiveAreaBump } from '@nivo/bump'
 import { AnimatePresence, motion } from 'framer-motion'
 import TemporalEnergyChart from './TemporalEnergyChart'
 import EnergyDistributionChart from './EnergyDistributionChart'
 import EnergyStatsCards from './EnergyStatsCards'
+import DailyConsumptionChart from './DailyConsumptionChart'
 
 type EnergyPoint = {
   timestamp: Date
@@ -489,48 +489,14 @@ export default function EnergyDashboardHomepage() {
 
     if (view === 'daily') {
       return (
-        <section>
-          <div className="mb-6">
-            <h3
-              className={`text-2xl font-bold ${
-                isDarkMode ? 'text-white' : 'text-slate-950'
-              }`}
-            >
-              Consumo Diário
-            </h3>
-
-            <p className={`${mutedTextClasses} mt-1`}>
-              Horas de maior utilização
-            </p>
-          </div>
-
-          <div className="h-[420px]">
-            <ResponsiveAreaBump
-              data={[
-                {
-                  id: 'Hoje',
-                  data: Array.from({ length: 12 }).map((_, index) => ({
-                    x: `${index * 2}:00`,
-                    y: Math.floor(Math.random() * 10),
-                  })),
-                },
-              ]}
-              theme={chartTheme}
-              margin={{
-                top: 40,
-                right: 40,
-                bottom: 40,
-                left: 40,
-              }}
-              spacing={8}
-              colors={['#1d4ed8']}
-              fillOpacity={0.22}
-              blendMode="normal"
-              animate
-              motionConfig="gentle"
-            />
-          </div>
-        </section>
+        <DailyConsumptionChart
+          energyData={energyData}
+          chartTheme={chartTheme}
+          selectedRange={selectedRange}
+          customStartDate={customStartDate}
+          customEndDate={customEndDate}
+          isDarkMode={isDarkMode}
+        />
       )
     }
 
