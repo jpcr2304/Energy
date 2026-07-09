@@ -76,9 +76,32 @@ export default function EnergyDashboardHomepage() {
 
   const navigate = useNavigate()
 
+  type StoredUser = {
+    id?: number
+    name: string
+    email: string
+  }
+
+  const [loggedUser, setLoggedUser] = useState<StoredUser | null>(() => {
+    const storedUser = localStorage.getItem('user')
+
+    if (!storedUser) {
+      return null
+    }
+
+    try {
+      return JSON.parse(storedUser) as StoredUser
+    } catch {
+      return null
+    }
+  })
+
+  const isUserLoggedIn = loggedUser !== null
+
   function handleSignOut() {
     localStorage.removeItem('user')
     localStorage.removeItem('token')
+    setLoggedUser(null)
     navigate('/')
   }
 
@@ -88,20 +111,32 @@ export default function EnergyDashboardHomepage() {
     const now = new Date()
     const start = new Date(now)
     start.setDate(now.getDate() - 30)
+    start.setSeconds(0, 0)
 
     const current = new Date(start)
     let accumulated = 0
 
     while (current <= now) {
-      const intervalConsumption = Math.floor(Math.random() * 8) + 2
+      const hour = current.getHours()
+
+      const baseConsumption =
+        hour >= 18 && hour <= 22
+          ? 0.18 / 12
+          : hour >= 8 && hour <= 17
+            ? 0.09 / 12
+            : 0.04 / 12
+
+      const randomVariation = Math.random() * 0.01
+      const intervalConsumption = baseConsumption + randomVariation
+
       accumulated += intervalConsumption
 
       data.push({
         timestamp: new Date(current),
-        accumulated,
+        accumulated: Number(accumulated.toFixed(4)),
       })
 
-      current.setHours(current.getHours() + 1)
+      current.setMinutes(current.getMinutes() + 5)
     }
 
     return data
@@ -113,6 +148,14 @@ export default function EnergyDashboardHomepage() {
   const [isEnergyDataLoading, setIsEnergyDataLoading] = useState(true)
 
   useEffect(() => {
+    if (!isUserLoggedIn) {
+      setBackendEnergyData([])
+      setIsEnergyDataLoading(false)
+      return
+    }
+
+    setIsEnergyDataLoading(true)
+
     const fetchEnergyData = () => {
       fetch('/api/energy/points')
         .then(response => {
@@ -147,7 +190,7 @@ export default function EnergyDashboardHomepage() {
     return () => {
       window.clearInterval(interval)
     }
-  }, [])
+  }, [isUserLoggedIn])
 
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [selectedRange, setSelectedRange] = useState<Range>('24h')
@@ -265,8 +308,8 @@ export default function EnergyDashboardHomepage() {
     }
   }
 
-  const hasEnoughRealDataForSelectedRange = useMemo(() => {
-    if (isEnergyDataLoading) {
+  const hasRealDataForSelectedGraph = useMemo(() => {
+    if (!isUserLoggedIn || isEnergyDataLoading) {
       return false
     }
 
@@ -276,21 +319,33 @@ export default function EnergyDashboardHomepage() {
       item => item.timestamp >= start && item.timestamp <= end
     )
 
-    return rangeData.length >= 25
+    return rangeData.length >= 2
   }, [
     backendEnergyData,
     selectedRange,
     customStartDate,
     customEndDate,
     isEnergyDataLoading,
+    isUserLoggedIn,
   ])
 
-  const energyData = hasEnoughRealDataForSelectedRange
-    ? backendEnergyData
-    : generatedEnergyData
+  const graphEnergyData =
+    !isUserLoggedIn
+      ? generatedEnergyData
+      : hasRealDataForSelectedGraph
+        ? backendEnergyData
+        : generatedEnergyData
 
-  const isShowingFictitiousData = !hasEnoughRealDataForSelectedRange
-  const shouldShowEnergyLoading = isEnergyDataLoading
+  const statsEnergyData =
+    !isUserLoggedIn
+      ? generatedEnergyData
+      : backendEnergyData
+
+  const isShowingFictitiousData =
+    !isUserLoggedIn || !hasRealDataForSelectedGraph
+
+  const shouldShowEnergyLoading =
+    isUserLoggedIn && isEnergyDataLoading
 
   const DatePartsInput = ({
     value,
@@ -464,7 +519,7 @@ export default function EnergyDashboardHomepage() {
     if (view === 'temporal') {
       return (
         <TemporalEnergyChart
-          energyData={energyData}
+          energyData={graphEnergyData}
           chartTheme={chartTheme}
           selectedRange={selectedRange}
           customStartDate={customStartDate}
@@ -477,7 +532,7 @@ export default function EnergyDashboardHomepage() {
     if (view === 'distribution') {
       return (
         <EnergyDistributionChart
-          energyData={energyData}
+          energyData={graphEnergyData}
           chartTheme={chartTheme}
           selectedRange={selectedRange}
           customStartDate={customStartDate}
@@ -490,7 +545,7 @@ export default function EnergyDashboardHomepage() {
     if (view === 'daily') {
       return (
         <DailyConsumptionChart
-          energyData={energyData}
+          energyData={graphEnergyData}
           chartTheme={chartTheme}
           selectedRange={selectedRange}
           customStartDate={customStartDate}
@@ -768,7 +823,7 @@ export default function EnergyDashboardHomepage() {
 
                 <div className="hidden sm:block text-left">
                   <p className="text-sm font-semibold">
-                    João Rodrigues
+                    {loggedUser?.name}
                   </p>
 
                   <p className={`text-xs ${mutedTextClasses}`}>
@@ -795,11 +850,11 @@ export default function EnergyDashboardHomepage() {
                     }`}
                   >
                     <p className="text-sm font-semibold">
-                      João Rodrigues
+                      {loggedUser?.name}
                     </p>
 
                     <p className={`text-xs ${mutedTextClasses}`}>
-                      jpcr.2304@gmail.com
+                      {loggedUser?.email}
                     </p>
                   </div>
 
@@ -843,7 +898,8 @@ export default function EnergyDashboardHomepage() {
               </div>
 
               <EnergyStatsCards
-                backendEnergyData={energyData}
+                backendEnergyData={statsEnergyData}
+                isEnergyDataLoading={isUserLoggedIn && isEnergyDataLoading}
                 mutedTextClasses={mutedTextClasses}
                 statsCardClasses={statsCardClasses}
               />
@@ -929,21 +985,40 @@ export default function EnergyDashboardHomepage() {
               </section>
 
               <section className="pt-2">
-                {!isEnergyDataLoading && isShowingFictitiousData && (
+                {!shouldShowEnergyLoading && isShowingFictitiousData && (
                   <div
-                    className={`mb-5 rounded-2xl border px-5 py-4 ${
+                    className={`mb-5 flex flex-col gap-3 rounded-2xl border px-5 py-4 ${
                       isDarkMode
                         ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
                         : 'border-amber-200 bg-amber-50 text-amber-800'
                     }`}
                   >
-                    <p className="font-semibold">
-                      Not enough real data for this range yet
-                    </p>
+                    <div>
+                      <p className="font-semibold">
+                        {isUserLoggedIn
+                          ? 'Not enough real data for this range yet'
+                          : "You're viewing demo data"}
+                      </p>
 
-                    <p className="mt-1 text-sm opacity-90">
-                      The displayed data is generated for demonstration purposes. Real data will be shown after enough data has been collected for the selected period.
-                    </p>
+                      <p className="mt-1 text-sm opacity-90">
+                        {isUserLoggedIn
+                          ? 'The displayed data is generated for demonstration purposes. Real data will be shown after enough data has been collected for the selected period.'
+                          : "The data you're seeing is generated for demonstration purposes. To set up your own dashboard and connect your energy device, please log in."}
+                      </p>
+                    </div>
+
+                    {!isUserLoggedIn && (
+                      <button
+                        onClick={() => navigate('/')}
+                        className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                          isDarkMode
+                            ? 'bg-blue-600 text-white hover:bg-blue-500'
+                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                      >
+                        Log in
+                      </button>
+                    )}
                   </div>
                 )}
 

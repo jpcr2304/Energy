@@ -56,13 +56,6 @@ function getSelectedRangeWindow(
   }
 }
 
-function getMaxAllowedGapHours(selectedRange: Range) {
-  if (selectedRange === '24h') return 2
-  if (selectedRange === '7d') return 8
-  if (selectedRange === '30d') return 24
-  return 8
-}
-
 export default function TemporalEnergyChart({
   energyData,
   chartTheme,
@@ -106,8 +99,6 @@ export default function TemporalEnergyChart({
       ]
     }
 
-    const maxAllowedGapHours = getMaxAllowedGapHours(selectedRange)
-
     const firstAvailablePoint = filteredData[0]
     const lastAvailablePoint = filteredData[filteredData.length - 1]
 
@@ -124,6 +115,13 @@ export default function TemporalEnergyChart({
     }
 
     const intervalDuration = (endTime - startTime) / 24
+
+    const intervalDurationHours = intervalDuration / (1000 * 60 * 60)
+
+    const maxAllowedGapHours = Math.max(
+      2,
+      intervalDurationHours * 1.2
+    )
 
     const chartPoints = Array.from({ length: 25 }).map((_, index) => {
       const intervalStart = new Date(startTime + index * intervalDuration)
@@ -324,8 +322,29 @@ export default function TemporalEnergyChart({
     .map(point => point.y)
     .filter((value): value is number => typeof value === 'number')
 
+  const getAdaptiveMaxY = (maxY: number) => {
+    if (maxY <= 0) {
+      return 0.01
+    }
+
+    const paddedMax = maxY * 1.15
+    const exponent = Math.floor(Math.log10(paddedMax))
+    const magnitude = Math.pow(10, exponent)
+    const normalized = paddedMax / magnitude
+
+    const niceSteps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+
+    const niceStep = niceSteps.find(step => step >= normalized) ?? 10
+
+    return Number((niceStep * magnitude).toPrecision(6))
+  }
+
   const maxY = yValues.length > 0 ? Math.max(...yValues) : 0
-  const computedMaxY = Math.max(1, Math.ceil(maxY * 1.2))
+  const computedMaxY = getAdaptiveMaxY(maxY)
+
+  const yTickValues = Array.from({ length: 6 }).map((_, index) =>
+    Number(((computedMaxY / 5) * index).toFixed(4))
+  )
 
   const tooltipWidth = tooltip?.point.hasMissingData ? 320 : 260
   const tooltipOffset = 20
@@ -443,6 +462,10 @@ export default function TemporalEnergyChart({
             legendPosition: 'middle',
           }}
           axisLeft={{
+            tickSize: 0,
+            tickPadding: 12,
+            tickRotation: 0,
+            tickValues: yTickValues,
             legend: 'kWh',
             legendOffset: -45,
             legendPosition: 'middle',

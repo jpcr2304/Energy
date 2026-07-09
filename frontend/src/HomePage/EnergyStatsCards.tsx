@@ -7,12 +7,14 @@ type EnergyPoint = {
 
 type EnergyStatsCardsProps = {
 	backendEnergyData: EnergyPoint[]
+	isEnergyDataLoading: boolean
 	mutedTextClasses: string
 	statsCardClasses: string
 }
 
 export default function EnergyStatsCards({
 	backendEnergyData,
+	isEnergyDataLoading,
 	mutedTextClasses,
 	statsCardClasses,
 }: EnergyStatsCardsProps) {
@@ -33,36 +35,68 @@ export default function EnergyStatsCards({
 			(a, b) => a.timestamp.getTime() - b.timestamp.getTime()
 		)
 
-		const calculateConsumptionForPeriod = (start: Date, end: Date) => {
+		const minimumCoveragePercent = 90
+		const maxConsumptionGapHours = 2
+		const maxActiveGapMinutes = 5
+
+		const calculatePeriodSummary = (start: Date, end: Date) => {
 			const periodData = sortedData.filter(
 				item => item.timestamp >= start && item.timestamp <= end
 			)
 
 			if (periodData.length < 2) {
-				return 0
+				return {
+					consumption: 0,
+					coverageHours: 0,
+					coveragePercent: 0,
+					hasEnoughData: false,
+				}
 			}
 
 			let total = 0
+			let coveredMs = 0
 
 			for (let i = 1; i < periodData.length; i++) {
 				const previous = periodData[i - 1]
 				const current = periodData[i]
 
-				const durationHours =
-					(current.timestamp.getTime() - previous.timestamp.getTime()) /
-					(1000 * 60 * 60)
+				const durationMs =
+					current.timestamp.getTime() - previous.timestamp.getTime()
+
+				if (durationMs <= 0) {
+					continue
+				}
+
+				const durationHours = durationMs / (1000 * 60 * 60)
+				const durationMinutes = durationMs / (1000 * 60)
 
 				const consumption = current.accumulated - previous.accumulated
 
-				const hasValidGap = durationHours > 0 && durationHours <= 2
 				const hasValidConsumption = consumption >= 0
 
-				if (hasValidGap && hasValidConsumption) {
+				if (
+					durationHours <= maxConsumptionGapHours &&
+					hasValidConsumption
+				) {
 					total += consumption
+				}
+
+				if (durationMinutes <= maxActiveGapMinutes) {
+					coveredMs += durationMs
 				}
 			}
 
-			return total
+			const periodMs = end.getTime() - start.getTime()
+
+			const coveragePercent =
+				periodMs > 0 ? Math.min(100, (coveredMs / periodMs) * 100) : 0
+
+			return {
+				consumption: total,
+				coverageHours: coveredMs / (1000 * 60 * 60),
+				coveragePercent,
+				hasEnoughData: coveragePercent >= minimumCoveragePercent,
+			}
 		}
 
 		const calculatePeakForPeriod = (start: Date, end: Date) => {
@@ -84,7 +118,6 @@ export default function EnergyStatsCards({
 				return 0
 			}
 
-			const maxAllowedGapHours = 2
 			const intervalDuration = (endTime - startTime) / 24
 
 			const chartPoints = Array.from({ length: 25 }).map((_, index) => {
@@ -111,16 +144,14 @@ export default function EnergyStatsCards({
 
 					if (
 						durationHours > 0 &&
-						durationHours <= maxAllowedGapHours &&
+						durationHours <= maxConsumptionGapHours &&
 						consumption >= 0
 					) {
 						y = Number(consumption.toFixed(2))
 					}
 				}
 
-				return {
-					y,
-				}
+				return { y }
 			})
 
 			if (chartPoints.length > 1) {
@@ -142,68 +173,73 @@ export default function EnergyStatsCards({
 			return Math.max(...visiblePoints.map(point => point.y))
 		}
 
-		const currentConsumption = calculateConsumptionForPeriod(
-			last24HoursStart,
-			now
-		)
+		const currentPeriod = calculatePeriodSummary(last24HoursStart, now)
 
-		const previousConsumption = calculateConsumptionForPeriod(
+		const previousPeriod = calculatePeriodSummary(
 			previous24HoursStart,
 			previous24HoursEnd
 		)
 
-		const peakConsumption = calculatePeakForPeriod(last24HoursStart, now)
+		const hasCurrentData = currentPeriod.hasEnoughData
+		const hasPreviousData = previousPeriod.hasEnoughData
 
-		const previousPeakConsumption = calculatePeakForPeriod(
-			previous24HoursStart,
-			previous24HoursEnd
-		)
+		const canCompare =
+			hasCurrentData &&
+			hasPreviousData &&
+			previousPeriod.consumption > 0
+
+		const currentConsumption = currentPeriod.consumption
+		const previousConsumption = previousPeriod.consumption
+
+		const peakConsumption = hasCurrentData
+			? calculatePeakForPeriod(last24HoursStart, now)
+			: 0
+
+		const previousPeakConsumption = hasPreviousData
+			? calculatePeakForPeriod(previous24HoursStart, previous24HoursEnd)
+			: 0
 
 		const pricePerKwh = 0.20
+
 		const estimatedCost = currentConsumption * pricePerKwh
 		const previousEstimatedCost = previousConsumption * pricePerKwh
 
-		const efficiency =
-			previousConsumption > 0
-				? Math.max(
-						0,
-						Math.min(
-							100,
-							100 -
-								((currentConsumption - previousConsumption) /
-									previousConsumption) *
-									100
-						)
+		const efficiency = canCompare
+			? Math.max(
+					0,
+					Math.min(
+						100,
+						100 -
+							((currentConsumption - previousConsumption) /
+								previousConsumption) *
+								100
 					)
-				: 100
+				)
+			: 0
 
-		const consumptionVariation =
-			previousConsumption > 0
-				? ((currentConsumption - previousConsumption) /
-						previousConsumption) *
-					100
-				: 0
+		const consumptionVariation = canCompare
+			? ((currentConsumption - previousConsumption) / previousConsumption) * 100
+			: 0
 
 		const peakVariation =
-			previousPeakConsumption > 0
+			canCompare && previousPeakConsumption > 0
 				? ((peakConsumption - previousPeakConsumption) /
 						previousPeakConsumption) *
 					100
 				: 0
 
 		const costVariation =
-			previousEstimatedCost > 0
+			canCompare && previousEstimatedCost > 0
 				? ((estimatedCost - previousEstimatedCost) /
 						previousEstimatedCost) *
 					100
 				: 0
 
-		const efficiencyVariation =
-			previousConsumption > 0
-				? currentConsumption <= previousConsumption
-					? Math.abs(consumptionVariation)
-					: -Math.abs(consumptionVariation)
-				: 0
+		const efficiencyVariation = canCompare
+			? currentConsumption <= previousConsumption
+				? Math.abs(consumptionVariation)
+				: -Math.abs(consumptionVariation)
+			: 0
 
 		return {
 			currentConsumption,
@@ -217,6 +253,11 @@ export default function EnergyStatsCards({
 			peakVariation,
 			costVariation,
 			efficiencyVariation,
+			hasCurrentData,
+			hasPreviousData,
+			canCompare,
+			currentCoveragePercent: currentPeriod.coveragePercent,
+			previousCoveragePercent: previousPeriod.coveragePercent,
 		}
 	}, [backendEnergyData])
 
@@ -234,40 +275,70 @@ export default function EnergyStatsCards({
 		return lowerIsBetter ? value < 0 : value > 0
 	}
 
+	const notEnoughDataLabel = isEnergyDataLoading ? 'Loading...' : 'Not enough data'
+
 	const stats = [
-        {
-            title: 'Consumption 24h',
-            value: `${statsData.currentConsumption.toFixed(2)} kWh`,
-            growth: formatVariation(statsData.consumptionVariation),
-            isPositive: isPositiveVariation(statsData.consumptionVariation, true),
-            description:
-                'Total energy consumed in the last 24 hours, calculated from real accumulated energy readings.',
-        },
-        {
-            title: 'Peak 24h',
-            value: `${statsData.peakConsumption.toFixed(2)} kWh`,
-            growth: formatVariation(statsData.peakVariation),
-            isPositive: isPositiveVariation(statsData.peakVariation, true),
-            description:
-                'Highest consumption interval shown in the last 24 hours, using the same interval logic as the temporal chart.',
-        },
-        {
-            title: 'Estimated Cost 24h',
-            value: `€${statsData.estimatedCost.toFixed(2)}`,
-            growth: formatVariation(statsData.costVariation),
-            isPositive: isPositiveVariation(statsData.costVariation, true),
-            description:
-                'Estimated cost for the last 24 hours based on the configured electricity price of €0.20 per kWh.',
-        },
-        {
-            title: 'Efficiency 24h',
-            value: `${statsData.efficiency.toFixed(0)}%`,
-            growth: formatVariation(statsData.efficiencyVariation),
-            isPositive: isPositiveVariation(statsData.efficiencyVariation, false),
-            description:
-                'Compares the last 24 hours with the previous 24 hours. Higher efficiency means consumption was lower than before.',
-        },
-    ]
+		{
+			title: 'Consumption 24h',
+			value:
+				statsData.hasCurrentData && !isEnergyDataLoading
+					? `${statsData.currentConsumption.toFixed(2)} kWh`
+					: notEnoughDataLabel,
+			growth:
+				statsData.canCompare && !isEnergyDataLoading
+					? formatVariation(statsData.consumptionVariation)
+					: notEnoughDataLabel,
+			isPositive: isPositiveVariation(statsData.consumptionVariation, true),
+			isNeutral: !statsData.canCompare || isEnergyDataLoading,
+			description:
+				'Total energy consumed in the last 24 hours. Change is only shown when both the current and previous 24 hours have at least 90% active data coverage.',
+		},
+		{
+			title: 'Peak 24h',
+			value:
+				statsData.hasCurrentData && !isEnergyDataLoading
+					? `${statsData.peakConsumption.toFixed(2)} kWh`
+					: notEnoughDataLabel,
+			growth:
+				statsData.canCompare && !isEnergyDataLoading
+					? formatVariation(statsData.peakVariation)
+					: notEnoughDataLabel,
+			isPositive: isPositiveVariation(statsData.peakVariation, true),
+			isNeutral: !statsData.canCompare || isEnergyDataLoading,
+			description:
+				'Highest consumption interval shown in the last 24 hours. Change requires at least 90% active data coverage in both periods.',
+		},
+		{
+			title: 'Estimated Cost 24h',
+			value:
+				statsData.hasCurrentData && !isEnergyDataLoading
+					? `€${statsData.estimatedCost.toFixed(2)}`
+					: notEnoughDataLabel,
+			growth:
+				statsData.canCompare && !isEnergyDataLoading
+					? formatVariation(statsData.costVariation)
+					: notEnoughDataLabel,
+			isPositive: isPositiveVariation(statsData.costVariation, true),
+			isNeutral: !statsData.canCompare || isEnergyDataLoading,
+			description:
+				'Estimated cost for the last 24 hours based on €0.20 per kWh. Change requires enough data in both periods.',
+		},
+		{
+			title: 'Efficiency 24h',
+			value:
+				statsData.canCompare && !isEnergyDataLoading
+					? `${statsData.efficiency.toFixed(0)}%`
+					: notEnoughDataLabel,
+			growth:
+				statsData.canCompare && !isEnergyDataLoading
+					? formatVariation(statsData.efficiencyVariation)
+					: notEnoughDataLabel,
+			isPositive: isPositiveVariation(statsData.efficiencyVariation, false),
+			isNeutral: !statsData.canCompare || isEnergyDataLoading,
+			description:
+				'Compares the last 24 hours with the previous 24 hours. It is only calculated when both periods have at least 90% active data coverage.',
+		},
+	]
 
 	return (
         <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
@@ -291,19 +362,27 @@ export default function EnergyStatsCards({
                     </div>
 
                     <div className="grid grid-cols-[1fr_auto] items-end gap-4">
-                        <h3 className="text-3xl font-bold whitespace-nowrap">
-                            {item.value}
-                        </h3>
+                        <h3
+							className={`font-bold whitespace-nowrap ${
+								item.value === 'Not enough data' || item.value === 'Loading...'
+									? 'text-lg'
+									: 'text-3xl'
+							}`}
+						>
+							{item.value}
+						</h3>
 
-                        <span
-                            className={`rounded-full px-3 py-1 text-sm font-bold ${
-                                item.isPositive
-                                    ? 'bg-emerald-500/10 text-emerald-400'
-                                    : 'bg-rose-500/10 text-rose-500'
-                            }`}
-                        >
-                            {item.growth}
-                        </span>
+						<span
+							className={`rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap ${
+								item.isNeutral
+									? 'bg-slate-500/10 text-slate-400'
+									: item.isPositive
+										? 'bg-emerald-500/10 text-emerald-400'
+										: 'bg-rose-500/10 text-rose-500'
+							}`}
+						>
+							{item.growth}
+						</span>
                     </div>
 
                     <div className="pointer-events-none absolute left-1/2 top-full z-[9999] mt-3 w-72 -translate-x-1/2 rounded-xl border border-white/10 bg-slate-950/95 px-4 py-3 text-sm text-slate-300 opacity-0 shadow-2xl transition-opacity duration-150 group-hover:opacity-100">
