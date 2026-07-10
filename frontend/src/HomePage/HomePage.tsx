@@ -102,7 +102,8 @@ export default function EnergyDashboardHomepage() {
     localStorage.removeItem('user')
     localStorage.removeItem('token')
     setLoggedUser(null)
-    navigate('/')
+    setShowUserMenu(false)
+    navigate('/home')
   }
 
   const generateEnergyData = (): EnergyPoint[] => {
@@ -841,75 +842,111 @@ export default function EnergyDashboardHomepage() {
               </span>
             </button>
 
-            <div className="relative" ref={userMenuRef}>
-              <button
-                onClick={() => setShowUserMenu(value => !value)}
-                className="cursor-pointer flex items-center gap-3"
-              >
-                <img
-                  src="https://i.pravatar.cc/80?img=12"
-                  alt="Utilizador"
-                  className="h-12 w-12 rounded-full object-cover ring-2 ring-blue-500/40"
-                />
-
-                <div className="hidden sm:block text-left">
-                  <p className="text-sm font-semibold">
-                    {loggedUser?.name}
-                  </p>
-
-                  <p className={`text-xs ${mutedTextClasses}`}>
-                    Admin
-                  </p>
-                </div>
-
-                <ChevronDownIcon
-                  className={`h-4 w-4 ${mutedTextClasses}`}
-                />
-              </button>
-
-              {showUserMenu && (
-                <div
-                  className={`absolute right-0 top-16 z-50 w-52 rounded-2xl border shadow-2xl overflow-hidden ${
-                    isDarkMode
-                      ? 'border-white/10 bg-slate-950'
-                      : 'border-slate-200 bg-white'
-                  }`}
+            {isUserLoggedIn ? (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(value => !value)}
+                  className="cursor-pointer flex items-center gap-3"
                 >
-                  <div
-                    className={`px-4 py-3 border-b ${
-                      isDarkMode ? 'border-white/10' : 'border-slate-200'
-                    }`}
-                  >
+                  <img
+                    src="https://i.pravatar.cc/80?img=12"
+                    alt="Utilizador"
+                    className="h-12 w-12 rounded-full object-cover ring-2 ring-blue-500/40"
+                  />
+
+                  <div className="hidden sm:block text-left">
                     <p className="text-sm font-semibold">
                       {loggedUser?.name}
                     </p>
 
                     <p className={`text-xs ${mutedTextClasses}`}>
-                      {loggedUser?.email}
+                      Admin
                     </p>
                   </div>
 
-                  <button
-                    className={`cursor-pointer w-full px-4 py-3 text-left text-sm ${
-                      isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    Account
-                  </button>
+                  <ChevronDownIcon
+                    className={`h-4 w-4 transition-transform duration-200 ${
+                      showUserMenu ? 'rotate-180' : ''
+                    } ${mutedTextClasses}`}
+                  />
+                </button>
 
-                  <button
-                    onClick={handleSignOut}
-                    className={`cursor-pointer w-full px-4 py-3 text-left text-sm ${
-                      isDarkMode
-                        ? 'text-rose-300 hover:bg-rose-500/10'
-                        : 'text-rose-600 hover:bg-rose-50'
-                    }`}
-                  >
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
+                <AnimatePresence>
+                  {showUserMenu && (
+                    <motion.div
+                      initial={{
+                        opacity: 0,
+                        y: -12,
+                        scale: 0.96,
+                      }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                        scale: 1,
+                      }}
+                      exit={{
+                        opacity: 0,
+                        y: -12,
+                        scale: 0.96,
+                      }}
+                      transition={{
+                        duration: 0.18,
+                        ease: 'easeInOut',
+                      }}
+                      className={`absolute right-0 top-16 z-50 w-52 rounded-2xl border shadow-2xl overflow-hidden origin-top-right ${
+                        isDarkMode
+                          ? 'border-white/10 bg-slate-950'
+                          : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div
+                        className={`px-4 py-3 border-b ${
+                          isDarkMode ? 'border-white/10' : 'border-slate-200'
+                        }`}
+                      >
+                        <p className="text-sm font-semibold">
+                          {loggedUser?.name}
+                        </p>
+
+                        <p className={`text-xs ${mutedTextClasses}`}>
+                          {loggedUser?.email}
+                        </p>
+                      </div>
+
+                      <button
+                        className={`cursor-pointer w-full px-4 py-3 text-left text-sm ${
+                          isDarkMode ? 'hover:bg-white/10' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        Account
+                      </button>
+
+                      <button
+                        onClick={handleSignOut}
+                        className={`cursor-pointer w-full px-4 py-3 text-left text-sm ${
+                          isDarkMode
+                            ? 'text-rose-300 hover:bg-rose-500/10'
+                            : 'text-rose-600 hover:bg-rose-50'
+                        }`}
+                      >
+                        Sign out
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <button
+                onClick={() => navigate('/')}
+                className={`cursor-pointer rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
+                  isDarkMode
+                    ? 'bg-blue-600 text-white hover:bg-blue-500'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                Log in
+              </button>
+            )}
           </div>
           </header>
         </div>
@@ -1112,7 +1149,7 @@ export default function EnergyDashboardHomepage() {
 
               {activeTopPage === 'devices' && renderDevicesPage()}
               {activeTopPage === 'settings' && renderSettingsPage()}
-              
+
             </motion.div>
           </AnimatePresence>
 
