@@ -194,7 +194,21 @@ export default function EnergyDashboardHomepage() {
 
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [selectedRange, setSelectedRange] = useState<Range>('24h')
-  const [activeTopPage, setActiveTopPage] = useState<TopPage>('statistics')
+  const topPages: TopPage[] = ['statistics', 'devices', 'settings']
+
+  const [topPageState, setTopPageState] = useState<{
+    page: TopPage
+    direction: number
+  }>({
+    page: 'statistics',
+    direction: 1,
+  })
+
+  const [isTopPageAnimating, setIsTopPageAnimating] = useState(false)
+
+  const activeTopPage = topPageState.page
+  const topPageDirection = topPageState.direction
+
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showCustomModal, setShowCustomModal] = useState(false)
 
@@ -515,6 +529,22 @@ export default function EnergyDashboardHomepage() {
     })
   }
 
+  const changeActiveTopPage = (nextPage: TopPage) => {
+    if (nextPage === activeTopPage || isTopPageAnimating) {
+      return
+    }
+
+    const currentIndex = topPages.indexOf(activeTopPage)
+    const nextIndex = topPages.indexOf(nextPage)
+
+    setShowCustomModal(false)
+
+    setTopPageState({
+      page: nextPage,
+      direction: nextIndex > currentIndex ? 1 : -1,
+    })
+  }
+
   const renderMainContent = (view: ActiveView) => {
     if (view === 'temporal') {
       return (
@@ -751,7 +781,8 @@ export default function EnergyDashboardHomepage() {
             ].map(item => (
               <button
                 key={item.id}
-                onClick={() => setActiveTopPage(item.id as TopPage)}
+                disabled={isTopPageAnimating}
+                onClick={() => changeActiveTopPage(item.id as TopPage)}
                 className={`cursor-pointer text-sm font-semibold transition-colors ${
                   activeTopPage === item.id
                     ? isDarkMode
@@ -885,188 +916,205 @@ export default function EnergyDashboardHomepage() {
       </div>
 
       <main className="mx-auto w-[92%] xl:w-[80%] py-8">
-          {activeTopPage === 'statistics' && (
-            <>
-              <div className="flex flex-col gap-2 mb-6">
-                <h2 className="text-4xl font-bold">
-                  Statistics
-                </h2>
+          <AnimatePresence mode="wait" custom={topPageDirection} initial={false}>
+            <motion.div
+              key={activeTopPage}
+              custom={topPageDirection}
+              variants={graphVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              onAnimationStart={() => setIsTopPageAnimating(true)}
+              onAnimationComplete={() => setIsTopPageAnimating(false)}
+              transition={{
+                duration: 0.18,
+                ease: 'easeInOut',
+              }}
+            >
+              {activeTopPage === 'statistics' && (
+                <>
+                  <div className="flex flex-col gap-2 mb-6">
+                    <h2 className="text-4xl font-bold">
+                      Statistics
+                    </h2>
 
-                <p className={mutedTextClasses}>
-                  Resumo geral do consumo energético da aplicação.
-                </p>
-              </div>
+                    <p className={mutedTextClasses}>
+                      Resumo geral do consumo energético da aplicação.
+                    </p>
+                  </div>
 
-              <EnergyStatsCards
-                backendEnergyData={statsEnergyData}
-                isEnergyDataLoading={isUserLoggedIn && isEnergyDataLoading}
-                mutedTextClasses={mutedTextClasses}
-                statsCardClasses={statsCardClasses}
-              />
+                  <EnergyStatsCards
+                    backendEnergyData={statsEnergyData}
+                    isEnergyDataLoading={isUserLoggedIn && isEnergyDataLoading}
+                    mutedTextClasses={mutedTextClasses}
+                    statsCardClasses={statsCardClasses}
+                  />
 
-              <section
-                className={`flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-8 border-t pt-6 ${subtleBorderClasses}`}
-              >
-                <div className={tabContainerClasses}>
-                  {[
-                    { id: 'temporal', label: 'Temporal' },
-                    { id: 'distribution', label: 'Distribuição' },
-                    { id: 'daily', label: 'Consumo Diário' },
-                    { id: 'insights', label: 'Insights' },
-                  ].map(item => (
-                    <button
-                      key={item.id}
-                      disabled={isGraphAnimating}
-                      onClick={() => changeActiveView(item.id as ActiveView)}
-                      className={`relative isolate cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
-                        activeView === item.id
-                          ? 'text-white'
-                          : isDarkMode
-                            ? 'text-slate-400 hover:text-white'
-                            : 'text-slate-500 hover:text-slate-900'
-                      }`}
-                    >
-                      {activeView === item.id && (
-                        <motion.span
-                          layoutId="active-graph-tab"
-                          className="absolute inset-0 z-0 rounded-xl bg-blue-600 shadow-lg shadow-blue-500/20"
-                          transition={{
-                            type: 'spring',
-                            stiffness: 450,
-                            damping: 35,
-                          }}
-                        />
-                      )}
-
-                      <span className="relative z-10">
-                        {item.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                <div className={rangeContainerClasses}>
-                  {(['24h', '7d', '30d', 'custom'] as const).map(range => (
-                    <button
-                      key={range}
-                      onClick={() => {
-                        setSelectedRange(range)
-
-                        if (range === 'custom') {
-                          setShowCustomModal(true)
-                        }
-                      }}
-                      className={`relative isolate cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
-                        selectedRange === range
-                          ? 'text-white'
-                          : isDarkMode
-                            ? 'text-slate-400 hover:text-white'
-                            : 'text-slate-500 hover:text-slate-900'
-                      }`}
-                    >
-                      {selectedRange === range && (
-                        <motion.span
-                          layoutId="active-range-tab"
-                          className="absolute inset-0 z-0 rounded-xl bg-blue-600 shadow-lg shadow-blue-500/20"
-                          transition={{
-                            type: 'spring',
-                            stiffness: 450,
-                            damping: 35,
-                          }}
-                        />
-                      )}
-
-                      <span className="relative z-10">
-                        {range === 'custom' ? 'Custom' : range}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="pt-2">
-                {!shouldShowEnergyLoading && isShowingFictitiousData && (
-                  <div
-                    className={`mb-5 flex flex-col gap-3 rounded-2xl border px-5 py-4 ${
-                      isDarkMode
-                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-                        : 'border-amber-200 bg-amber-50 text-amber-800'
-                    }`}
+                  <section
+                    className={`flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-8 border-t pt-6 ${subtleBorderClasses}`}
                   >
-                    <div>
-                      <p className="font-semibold">
-                        {isUserLoggedIn
-                          ? 'Not enough real data for this range yet'
-                          : "You're viewing demo data"}
-                      </p>
+                    <div className={tabContainerClasses}>
+                      {[
+                        { id: 'temporal', label: 'Temporal' },
+                        { id: 'distribution', label: 'Distribuição' },
+                        { id: 'daily', label: 'Consumo Diário' },
+                        { id: 'insights', label: 'Insights' },
+                      ].map(item => (
+                        <button
+                          key={item.id}
+                          disabled={isGraphAnimating}
+                          onClick={() => changeActiveView(item.id as ActiveView)}
+                          className={`relative isolate cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                            activeView === item.id
+                              ? 'text-white'
+                              : isDarkMode
+                                ? 'text-slate-400 hover:text-white'
+                                : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          {activeView === item.id && (
+                            <motion.span
+                              layoutId="active-graph-tab"
+                              className="absolute inset-0 z-0 rounded-xl bg-blue-600 shadow-lg shadow-blue-500/20"
+                              transition={{
+                                type: 'spring',
+                                stiffness: 450,
+                                damping: 35,
+                              }}
+                            />
+                          )}
 
-                      <p className="mt-1 text-sm opacity-90">
-                        {isUserLoggedIn
-                          ? 'The displayed data is generated for demonstration purposes. Real data will be shown after enough data has been collected for the selected period.'
-                          : "The data you're seeing is generated for demonstration purposes. To set up your own dashboard and connect your energy device, please log in."}
-                      </p>
+                          <span className="relative z-10">
+                            {item.label}
+                          </span>
+                        </button>
+                      ))}
                     </div>
 
-                    {!isUserLoggedIn && (
-                      <button
-                        onClick={() => navigate('/')}
-                        className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                    <div className={rangeContainerClasses}>
+                      {(['24h', '7d', '30d', 'custom'] as const).map(range => (
+                        <button
+                          key={range}
+                          onClick={() => {
+                            setSelectedRange(range)
+
+                            if (range === 'custom') {
+                              setShowCustomModal(true)
+                            }
+                          }}
+                          className={`relative isolate cursor-pointer px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                            selectedRange === range
+                              ? 'text-white'
+                              : isDarkMode
+                                ? 'text-slate-400 hover:text-white'
+                                : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          {selectedRange === range && (
+                            <motion.span
+                              layoutId="active-range-tab"
+                              className="absolute inset-0 z-0 rounded-xl bg-blue-600 shadow-lg shadow-blue-500/20"
+                              transition={{
+                                type: 'spring',
+                                stiffness: 450,
+                                damping: 35,
+                              }}
+                            />
+                          )}
+
+                          <span className="relative z-10">
+                            {range === 'custom' ? 'Custom' : range}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="pt-2">
+                    {!shouldShowEnergyLoading && isShowingFictitiousData && (
+                      <div
+                        className={`mb-5 flex flex-col gap-3 rounded-2xl border px-5 py-4 ${
                           isDarkMode
-                            ? 'bg-blue-600 text-white hover:bg-blue-500'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                            : 'border-amber-200 bg-amber-50 text-amber-800'
                         }`}
                       >
-                        Log in
-                      </button>
+                        <div>
+                          <p className="font-semibold">
+                            {isUserLoggedIn
+                              ? 'Not enough real data for this range yet'
+                              : "You're viewing demo data"}
+                          </p>
+
+                          <p className="mt-1 text-sm opacity-90">
+                            {isUserLoggedIn
+                              ? 'The displayed data is generated for demonstration purposes. Real data will be shown after enough data has been collected for the selected period.'
+                              : "The data you're seeing is generated for demonstration purposes. To set up your own dashboard and connect your energy device, please log in."}
+                          </p>
+                        </div>
+
+                        {!isUserLoggedIn && (
+                          <button
+                            onClick={() => navigate('/')}
+                            className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                              isDarkMode
+                                ? 'bg-blue-600 text-white hover:bg-blue-500'
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                            }`}
+                          >
+                            Log in
+                          </button>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
 
-                {shouldShowEnergyLoading ? (
-                  <div
-                    className={`h-[460px] rounded-2xl border flex items-center justify-center ${
-                      isDarkMode
-                        ? 'border-white/10 bg-white/5 text-slate-400'
-                        : 'border-slate-200 bg-white text-slate-500'
-                    }`}
-                  >
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="h-8 w-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-
-                      <p className="text-sm font-medium">
-                        Loading energy data...
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative overflow-visible">
-                    <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
-                      <motion.div
-                        key={activeView}
-                        custom={slideDirection}
-                        variants={graphVariants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        onAnimationStart={() => setIsGraphAnimating(true)}
-                        onAnimationComplete={() => setIsGraphAnimating(false)}
-                        transition={{
-                          duration: 0.18,
-                          ease: 'easeInOut',
-                        }}
+                    {shouldShowEnergyLoading ? (
+                      <div
+                        className={`h-[460px] rounded-2xl border flex items-center justify-center ${
+                          isDarkMode
+                            ? 'border-white/10 bg-white/5 text-slate-400'
+                            : 'border-slate-200 bg-white text-slate-500'
+                        }`}
                       >
-                        {renderMainContent(activeView)}
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
-                )}
-              </section>
-            </>
-          )}
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="h-8 w-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
 
-          {activeTopPage === 'devices' && renderDevicesPage()}
+                          <p className="text-sm font-medium">
+                            Loading energy data...
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative overflow-visible">
+                        <AnimatePresence mode="wait" custom={slideDirection} initial={false}>
+                          <motion.div
+                            key={activeView}
+                            custom={slideDirection}
+                            variants={graphVariants}
+                            initial="enter"
+                            animate="center"
+                            exit="exit"
+                            onAnimationStart={() => setIsGraphAnimating(true)}
+                            onAnimationComplete={() => setIsGraphAnimating(false)}
+                            transition={{
+                              duration: 0.18,
+                              ease: 'easeInOut',
+                            }}
+                          >
+                            {renderMainContent(activeView)}
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </section>
+                </>
+              )}
 
-          {activeTopPage === 'settings' && renderSettingsPage()}
+              {activeTopPage === 'devices' && renderDevicesPage()}
+              {activeTopPage === 'settings' && renderSettingsPage()}
+              
+            </motion.div>
+          </AnimatePresence>
 
           {showCustomModal && activeTopPage === 'statistics' && (
             <>
