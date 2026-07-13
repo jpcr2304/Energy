@@ -22,18 +22,18 @@ export default function AuthPage() {
     setError('')
 
     if (!email || !password) {
-      setError('Preenche o email e a palavra-passe.')
+      setError('Fill in your email and password.')
       return
     }
 
     if (mode === 'register') {
       if (!name) {
-        setError('Preenche o nome.')
+        setError('Fill in your name.')
         return
       }
 
       if (password !== confirmPassword) {
-        setError('As palavras-passe não coincidem.')
+        setError('The passwords do not match.')
         return
       }
     }
@@ -217,13 +217,18 @@ export default function AuthPage() {
                 <form className="space-y-5" onSubmit={handleSubmit}>
                   {mode === 'register' && (
                     <div>
-                      <label className="mb-2 block text-sm text-slate-400">
-                        Nome
+                      <label
+                        htmlFor="name"
+                        className="mb-2 block text-sm text-slate-400"
+                      >
+                        Name
                       </label>
-
                       <input
+                        id="name"
+                        name="name"
                         type="text"
-                        placeholder="Nome"
+                        autoComplete="name"
+                        placeholder="Name"
                         value={name}
                         onChange={e => setName(e.target.value)}
                         className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-4 outline-none transition-all placeholder:text-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
@@ -232,12 +237,17 @@ export default function AuthPage() {
                   )}
 
                   <div>
-                    <label className="mb-2 block text-sm text-slate-400">
+                    <label
+                      htmlFor="email"
+                      className="mb-2 block text-sm text-slate-400"
+                    >
                       Email
                     </label>
-
                     <input
+                      id="email"
+                      name="email"
                       type="email"
+                      autoComplete="email"
                       placeholder="example@email.com"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
@@ -246,12 +256,17 @@ export default function AuthPage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm text-slate-400">
-                      Palavra-passe
+                    <label
+                      htmlFor="password"
+                      className="mb-2 block text-sm text-slate-400"
+                    >
+                      Password
                     </label>
-
                     <input
+                      id="password"
+                      name="password"
                       type="password"
+                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                       placeholder="••••••••"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
@@ -261,12 +276,17 @@ export default function AuthPage() {
 
                   {mode === 'register' && (
                     <div>
-                      <label className="mb-2 block text-sm text-slate-400">
-                        Confirmar palavra-passe
+                      <label
+                        htmlFor="confirm-password"
+                        className="mb-2 block text-sm text-slate-400"
+                      >
+                        Confirm Password
                       </label>
-
                       <input
+                        id="confirm-password"
+                        name="confirmPassword"
                         type="password"
+                        autoComplete="new-password"
                         placeholder="••••••••"
                         value={confirmPassword}
                         onChange={e => setConfirmPassword(e.target.value)}
@@ -282,20 +302,24 @@ export default function AuthPage() {
                           type="checkbox"
                           className="accent-blue-500"
                         />
-                        Lembrar-me
+                        Remember me
                       </label>
 
                       <button
                         type="button"
                         className="cursor-pointer text-blue-400 transition-colors hover:text-blue-300"
                       >
-                        Esqueceste-te da password?
+                        Forgot your password?
                       </button>
                     </div>
                   )}
 
                   {error && (
-                    <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                    <div
+                      role="alert"
+                      aria-live="polite"
+                      className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+                    >
                       {error}
                     </div>
                   )}
@@ -308,8 +332,8 @@ export default function AuthPage() {
                     {loading
                       ? 'A processar...'
                       : mode === 'login'
-                        ? 'Entrar'
-                        : 'Criar conta'}
+                        ? 'Login'
+                        : 'Create account'}
                   </button>
                 </form>
               </motion.div>
@@ -320,10 +344,11 @@ export default function AuthPage() {
                 ? 'Ainda não tens conta?'
                 : 'Já tens conta?'}{' '}
               <button
+                type="button"
                 onClick={switchMode}
                 className="cursor-pointer text-blue-400 transition-colors hover:text-blue-300"
               >
-                {mode === 'login' ? 'Criar conta' : 'Fazer login'}
+                {mode === 'login' ? 'Create account' : 'Login'}
               </button>
             </p>
           </motion.div>
