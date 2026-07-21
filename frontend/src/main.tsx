@@ -8,6 +8,7 @@ import {
 
 import './index.css'
 import EnergyDashboardHomepage from './HomePage/HomePage'
+import Auth from './AuthPage/AuthPage'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -18,6 +19,10 @@ createRoot(document.getElementById('root')!).render(
         <Route
           path="/home"
           element={<EnergyDashboardHomepage />}
+        />
+        <Route
+          path="/login"
+          element={<Auth />}
         />
       </Routes>
     </BrowserRouter>

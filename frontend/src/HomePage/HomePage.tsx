@@ -937,7 +937,7 @@ export default function EnergyDashboardHomepage() {
               </div>
             ) : (
               <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/login')}
                 className={`cursor-pointer rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
                   isDarkMode
                     ? 'bg-blue-600 text-white hover:bg-blue-500'
@@ -1092,7 +1092,7 @@ export default function EnergyDashboardHomepage() {
 
                         {!isUserLoggedIn && (
                           <button
-                            onClick={() => navigate('/')}
+                            onClick={() => navigate('/login')}
                             className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
                               isDarkMode
                                 ? 'bg-blue-600 text-white hover:bg-blue-500'

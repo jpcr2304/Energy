@@ -112,6 +112,10 @@ function getLocalDayKey(date: Date) {
 	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+const MINIMUM_COVERAGE_PERCENT = 80
+const SHOW_COVERAGE_BELOW_PERCENT = 95
+const MAX_ACTIVE_GAP_MINUTES = 5
+
 export default function DailyConsumptionChart({
 	energyData,
 	chartTheme,
@@ -149,7 +153,7 @@ export default function DailyConsumptionChart({
 			.filter(item => item.timestamp >= start && item.timestamp <= end)
 			.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
-		if (filteredData.length < 2) {
+		if (selectedRange !== '24h' && filteredData.length < 2) {
 			return [
 				{
 					id: 'Energy consumption',
@@ -161,52 +165,105 @@ export default function DailyConsumptionChart({
 		const maxAllowedGapHours = 2
 
 		if (selectedRange === '24h') {
-			const firstAvailablePoint = filteredData[0]
-			const lastAvailablePoint = filteredData[filteredData.length - 1]
-
-			const startTime = firstAvailablePoint.timestamp.getTime()
-			const endTime = lastAvailablePoint.timestamp.getTime()
-
-			if (startTime === endTime) {
-				return [
-					{
-						id: 'Energy consumption',
-						data: [],
-					},
-				]
-			}
+			const startTime = start.getTime()
+			const endTime = end.getTime()
 
 			const intervalDuration = (endTime - startTime) / 24
 
-			const chartPoints = Array.from({ length: 25 }).map((_, index) => {
-				const intervalStart = new Date(startTime + index * intervalDuration)
-				const intervalEnd = new Date(startTime + (index + 1) * intervalDuration)
+			const chartPoints = Array.from({ length: 24 }).map((_, index) => {
+				const intervalStart = new Date(
+					startTime + index * intervalDuration
+				)
+
+				const intervalEnd = new Date(
+					startTime + (index + 1) * intervalDuration
+				)
 
 				const pointsInsideInterval = filteredData.filter(
 					item =>
 						item.timestamp >= intervalStart &&
-						item.timestamp <= intervalEnd
+						(index === 23
+							? item.timestamp <= intervalEnd
+							: item.timestamp < intervalEnd)
 				)
 
 				let y = 0
 				let hasMissingData = false
+				let coveragePercent = 0
 
 				if (pointsInsideInterval.length >= 2) {
-					const firstPoint = pointsInsideInterval[0]
-					const lastPoint = pointsInsideInterval[pointsInsideInterval.length - 1]
+					let coveredMs = 0
 
-					const durationHours =
-						(lastPoint.timestamp.getTime() - firstPoint.timestamp.getTime()) /
-						(1000 * 60 * 60)
-
-					const consumption = lastPoint.accumulated - firstPoint.accumulated
-
-					if (
-						durationHours > 0 &&
-						durationHours <= maxAllowedGapHours &&
-						consumption >= 0
+					for (
+						let pointIndex = 1;
+						pointIndex < pointsInsideInterval.length;
+						pointIndex++
 					) {
-						y = Number(consumption.toFixed(2))
+						const previousPoint =
+							pointsInsideInterval[pointIndex - 1]
+
+						const currentPoint =
+							pointsInsideInterval[pointIndex]
+
+						const durationMs =
+							currentPoint.timestamp.getTime() -
+							previousPoint.timestamp.getTime()
+
+						if (durationMs <= 0) {
+							continue
+						}
+
+						const durationMinutes =
+							durationMs / (1000 * 60)
+
+						if (
+							durationMinutes <= MAX_ACTIVE_GAP_MINUTES
+						) {
+							coveredMs += durationMs
+						}
+					}
+
+					const intervalMs =
+						intervalEnd.getTime() -
+						intervalStart.getTime()
+
+					coveragePercent =
+						intervalMs > 0
+							? Math.min(
+									100,
+									(coveredMs / intervalMs) * 100
+								)
+							: 0
+
+					const hasEnoughCoverage =
+						coveragePercent >= MINIMUM_COVERAGE_PERCENT
+
+					if (hasEnoughCoverage) {
+						const firstPoint = pointsInsideInterval[0]
+
+						const lastPoint =
+							pointsInsideInterval[
+								pointsInsideInterval.length - 1
+							]
+
+						const durationHours =
+							(lastPoint.timestamp.getTime() -
+								firstPoint.timestamp.getTime()) /
+							(1000 * 60 * 60)
+
+						const consumption =
+							lastPoint.accumulated -
+							firstPoint.accumulated
+
+						if (
+							durationHours > 0 &&
+							durationHours <= maxAllowedGapHours &&
+							consumption >= 0
+						) {
+							y = Number(consumption.toFixed(2))
+						} else {
+							hasMissingData = true
+						}
 					} else {
 						hasMissingData = true
 					}
@@ -216,37 +273,76 @@ export default function DailyConsumptionChart({
 
 				return {
 					x: `${index}`,
-					label: intervalStart.toLocaleTimeString('pt-PT', {
-						hour: '2-digit',
-						minute: '2-digit',
-					}),
+					label: intervalStart.toLocaleTimeString(
+						'pt-PT',
+						{
+							hour: '2-digit',
+							minute: '2-digit',
+						}
+					),
 					intervalLabel: `${formatDateTime(intervalStart)} → ${formatDateTime(intervalEnd)}`,
 					y,
 					hasMissingData,
+					coveragePercent: Number(
+						coveragePercent.toFixed(0)
+					),
 					valueLabel: 'Consumption',
 				}
 			})
 
-			if (chartPoints.length > 1) {
-				const lastIndex = chartPoints.length - 1
-				const previousPoint = chartPoints[lastIndex - 1]
+			const lastPoint = chartPoints[chartPoints.length - 1]
 
-				chartPoints[lastIndex] = {
-					...chartPoints[lastIndex],
-					y: previousPoint.y,
-					hasMissingData: previousPoint.hasMissingData,
-				}
-			}
+			const extendedChartPoints = [
+				...chartPoints,
+				{
+					...lastPoint,
+					x: '24',
+					label: end.toLocaleTimeString('pt-PT', {
+						hour: '2-digit',
+						minute: '2-digit',
+					}),
+				},
+			]
 
 			return [
 				{
 					id: 'Energy consumption',
-					data: chartPoints,
+					data: extendedChartPoints,
 				},
 			]
 		}
 
-		const minimumCoverageMinutes = 50
+		const expectedCoverageMinutesByHour =
+			Array.from({ length: 24 }, () => 0)
+
+		let expectedCursor = new Date(start)
+
+		while (expectedCursor < end) {
+			const nextHour = new Date(expectedCursor)
+
+			nextHour.setHours(
+				expectedCursor.getHours() + 1,
+				0,
+				0,
+				0
+			)
+
+			const segmentEnd = new Date(
+				Math.min(nextHour.getTime(), end.getTime())
+			)
+
+			const expectedMinutes =
+				(segmentEnd.getTime() - expectedCursor.getTime()) /
+				(1000 * 60)
+
+			if (expectedMinutes > 0) {
+				expectedCoverageMinutesByHour[
+					expectedCursor.getHours()
+				] += expectedMinutes
+			}
+
+			expectedCursor = segmentEnd
+		}
 
 		const hourlyConsumptionByDay = Array.from({ length: 24 }).map(
 			() => new Map<string, number>()
@@ -263,12 +359,14 @@ export default function DailyConsumptionChart({
 			const durationMs =
 				current.timestamp.getTime() - previous.timestamp.getTime()
 
-			const durationHours = durationMs / (1000 * 60 * 60)
+			const durationMinutes = durationMs / (1000 * 60)
 
-			const consumption = current.accumulated - previous.accumulated
+			const consumption =
+				current.accumulated - previous.accumulated
 
 			const hasValidGap =
-				durationHours > 0 && durationHours <= maxAllowedGapHours
+				durationMinutes > 0 &&
+				durationMinutes <= MAX_ACTIVE_GAP_MINUTES
 
 			const hasValidConsumption = consumption >= 0
 
@@ -336,31 +434,63 @@ export default function DailyConsumptionChart({
 		const chartPoints = Array.from({ length: 24 }).map((_, hour) => {
 			const nextHour = hour + 1
 
+			const totalCoveredMinutes = Array.from(
+				hourlyCoverageByDay[hour].values()
+			).reduce((sum, coverage) => sum + coverage, 0)
+
+			const expectedCoverageMinutes =
+				expectedCoverageMinutesByHour[hour]
+
+			const coveragePercent =
+				expectedCoverageMinutes > 0
+					? Math.min(
+							100,
+							(totalCoveredMinutes / expectedCoverageMinutes) * 100
+						)
+					: 0
+
+			const hasEnoughCoverage =
+				coveragePercent >= MINIMUM_COVERAGE_PERCENT
+
 			const validDayValues = Array.from(
 				hourlyConsumptionByDay[hour].entries()
 			)
 				.filter(([dayKey]) => {
-					const coverage =
+					const coverageMinutes =
 						hourlyCoverageByDay[hour].get(dayKey) ?? 0
 
-					return coverage >= minimumCoverageMinutes
+					const dayCoveragePercent =
+						(coverageMinutes / 60) * 100
+
+					return (
+						dayCoveragePercent >= MINIMUM_COVERAGE_PERCENT
+					)
 				})
 				.map(([, value]) => value)
 
-			const averageConsumption =
-				validDayValues.length > 0
-					? validDayValues.reduce((sum, value) => sum + value, 0) /
-						validDayValues.length
-					: 0
+			const canShowValue =
+				hasEnoughCoverage && validDayValues.length > 0
+
+			const averageConsumption = canShowValue
+				? validDayValues.reduce(
+						(sum, value) => sum + value,
+						0
+					) / validDayValues.length
+				: 0
 
 			return {
 				x: `${hour}`,
 				label: formatHour(hour),
 				intervalLabel: `${formatHour(hour)} → ${
-					nextHour === 24 ? '24:00' : formatHour(nextHour)
+					nextHour === 24
+						? '24:00'
+						: formatHour(nextHour)
 				}`,
 				y: Number(averageConsumption.toFixed(2)),
-				hasMissingData: validDayValues.length === 0,
+				hasMissingData: !canShowValue,
+				coveragePercent: Number(
+					coveragePercent.toFixed(0)
+				),
 				valueLabel: 'Average hourly consumption',
 			}
 		})
@@ -673,7 +803,13 @@ export default function DailyConsumptionChart({
 								<span className="text-blue-400 font-bold text-lg whitespace-nowrap text-right">
 									{tooltip.point.hasMissingData
 										? 'Not enough data'
-										: `${tooltip.point.y} kWh`}
+										: `${tooltip.point.y} kWh${
+												typeof tooltip.point.coveragePercent === 'number' &&
+												tooltip.point.coveragePercent <
+													SHOW_COVERAGE_BELOW_PERCENT
+													? ` (${tooltip.point.coveragePercent}% coverage)`
+													: ''
+											}`}
 								</span>
 							</div>
 						</div>

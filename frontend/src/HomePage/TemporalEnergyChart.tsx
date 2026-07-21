@@ -90,7 +90,16 @@ export default function TemporalEnergyChart({
   }, [selectedRange, energyData, customStartDate, customEndDate])
 
   const currentChartData = useMemo(() => {
-    if (filteredData.length < 2) {
+    const { start: selectedStart, end: selectedEnd } =
+      getSelectedRangeWindow(
+        selectedRange,
+        customStartDate,
+        customEndDate
+      )
+
+    const shouldShowFull24Hours = selectedRange === '24h'
+
+    if (!shouldShowFull24Hours && filteredData.length < 2) {
       return [
         {
           id: 'Energia',
@@ -99,13 +108,19 @@ export default function TemporalEnergyChart({
       ]
     }
 
-    const firstAvailablePoint = filteredData[0]
-    const lastAvailablePoint = filteredData[filteredData.length - 1]
+    const startTime = shouldShowFull24Hours
+      ? selectedStart.getTime()
+      : filteredData[0].timestamp.getTime()
 
-    const startTime = firstAvailablePoint.timestamp.getTime()
-    const endTime = lastAvailablePoint.timestamp.getTime()
+    const endTime = shouldShowFull24Hours
+      ? selectedEnd.getTime()
+      : filteredData[filteredData.length - 1].timestamp.getTime()
 
-    if (startTime === endTime) {
+    if (
+      !Number.isFinite(startTime) ||
+      !Number.isFinite(endTime) ||
+      startTime >= endTime
+    ) {
       return [
         {
           id: 'Energia',
@@ -122,6 +137,9 @@ export default function TemporalEnergyChart({
       2,
       intervalDurationHours * 1.2
     )
+
+    const minimumCoveragePercent = 80
+    const maxActiveGapMinutes = 5
 
     const chartPoints = Array.from({ length: 25 }).map((_, index) => {
       const intervalStart = new Date(startTime + index * intervalDuration)
@@ -157,23 +175,60 @@ export default function TemporalEnergyChart({
 
       let y = 0
       let hasMissingData = false
+      let coveragePercent = 0
 
       if (pointsInsideInterval.length >= 2) {
-        const firstPoint = pointsInsideInterval[0]
-        const lastPoint = pointsInsideInterval[pointsInsideInterval.length - 1]
+        let coveredMs = 0
 
-        const durationHours =
-          (lastPoint.timestamp.getTime() - firstPoint.timestamp.getTime()) /
-          (1000 * 60 * 60)
+        for (let pointIndex = 1; pointIndex < pointsInsideInterval.length; pointIndex++) {
+          const previousPoint = pointsInsideInterval[pointIndex - 1]
+          const currentPoint = pointsInsideInterval[pointIndex]
 
-        const consumption = lastPoint.accumulated - firstPoint.accumulated
+          const durationMs =
+            currentPoint.timestamp.getTime() - previousPoint.timestamp.getTime()
 
-        if (
-          durationHours > 0 &&
-          durationHours <= maxAllowedGapHours &&
-          consumption >= 0
-        ) {
-          y = Number(consumption.toFixed(2))
+          if (durationMs <= 0) {
+            continue
+          }
+
+          const durationMinutes = durationMs / (1000 * 60)
+
+          if (durationMinutes <= maxActiveGapMinutes) {
+            coveredMs += durationMs
+          }
+        }
+
+        const intervalMs =
+          intervalEnd.getTime() - intervalStart.getTime()
+
+        coveragePercent =
+          intervalMs > 0
+            ? Math.min(100, (coveredMs / intervalMs) * 100)
+            : 0
+
+        const hasEnoughCoverage =
+          coveragePercent >= minimumCoveragePercent
+
+        if (hasEnoughCoverage) {
+          const firstPoint = pointsInsideInterval[0]
+          const lastPoint = pointsInsideInterval[pointsInsideInterval.length - 1]
+
+          const durationHours =
+            (lastPoint.timestamp.getTime() - firstPoint.timestamp.getTime()) /
+            (1000 * 60 * 60)
+
+          const consumption = lastPoint.accumulated - firstPoint.accumulated
+
+          if (
+            durationHours > 0 &&
+            durationHours <= maxAllowedGapHours &&
+            consumption >= 0
+          ) {
+            y = Number(consumption.toFixed(2))
+          } else {
+            y = 0
+            hasMissingData = true
+          }
         } else {
           y = 0
           hasMissingData = true
@@ -198,6 +253,7 @@ export default function TemporalEnergyChart({
         intervalLabel: `${startLabel} → ${endLabel}`,
         y,
         hasMissingData,
+        coveragePercent: Number(coveragePercent.toFixed(0)),
       }
     })
 
@@ -221,6 +277,8 @@ export default function TemporalEnergyChart({
   }, [
     filteredData,
     selectedRange,
+    customStartDate,
+    customEndDate,
   ])
 
   const chartTitle = useMemo(() => {
@@ -527,7 +585,14 @@ export default function TemporalEnergyChart({
                 </span>
 
                 <span className="text-blue-400 font-bold text-lg whitespace-nowrap text-right">
-                  {tooltip.point.hasMissingData ? 'Not enough data' : `${tooltip.point.y} kWh`}
+                  {tooltip.point.hasMissingData
+                    ? 'Not enough data'
+                    : `${tooltip.point.y} kWh${
+                        typeof tooltip.point.coveragePercent === 'number' &&
+                        tooltip.point.coveragePercent < 95
+                          ? ` (${tooltip.point.coveragePercent}% coverage)`
+                          : ''
+                      }`}
                 </span>
               </div>
             </div>
