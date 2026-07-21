@@ -7,15 +7,13 @@ import {
 } from 'react-router-dom'
 
 import './index.css'
-
-import AuthPage from './AuthPage/AuthPage'
 import EnergyDashboardHomepage from './HomePage/HomePage'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<AuthPage />} />
+        <Route path="/" element={<EnergyDashboardHomepage />} />
 
         <Route
           path="/home"
