@@ -5,6 +5,7 @@ import TemporalEnergyChart from './TemporalEnergyChart'
 import EnergyDistributionChart from './EnergyDistributionChart'
 import EnergyStatsCards from './EnergyStatsCards'
 import DailyConsumptionChart from './DailyConsumptionChart'
+import DevicesPage from '../Devices/DevicesPage'
 
 type EnergyPoint = {
   timestamp: Date
@@ -680,32 +681,6 @@ export default function EnergyDashboardHomepage() {
     )
   }
 
-  const renderDevicesPage = () => {
-    return (
-      <section className="pt-8">
-        <div className="mb-6">
-          <h2 className="text-4xl font-bold">
-            Devices
-          </h2>
-
-          <p className={mutedTextClasses}>
-            Gestão dos equipamentos ligados à aplicação.
-          </p>
-        </div>
-
-        <div
-          className={`rounded-2xl border border-dashed p-10 text-center ${
-            isDarkMode
-              ? 'border-white/10 text-slate-400'
-              : 'border-slate-300 text-slate-500'
-          }`}
-        >
-          Ainda não existem dispositivos configurados.
-        </div>
-      </section>
-    )
-  }
-
   const renderSettingsPage = () => {
     return (
       <section className="pt-8">
@@ -1147,7 +1122,9 @@ export default function EnergyDashboardHomepage() {
                 </>
               )}
 
-              {activeTopPage === 'devices' && renderDevicesPage()}
+              {activeTopPage === 'devices' && (
+                <DevicesPage isDarkMode={isDarkMode} />
+              )}
               {activeTopPage === 'settings' && renderSettingsPage()}
 
             </motion.div>
