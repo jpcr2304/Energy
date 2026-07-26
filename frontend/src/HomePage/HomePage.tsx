@@ -12,6 +12,13 @@ type EnergyPoint = {
   accumulated: number
 }
 
+type DashboardDevice = {
+  id: number
+  name: string
+  enabled: boolean
+  status: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'ERROR'
+}
+
 type Range = '24h' | '7d' | '30d' | 'custom'
 type ActiveView = 'temporal' | 'distribution' | 'daily' | 'insights'
 type ThemeMode = 'dark' | 'light'
@@ -85,8 +92,11 @@ export default function EnergyDashboardHomepage() {
 
   const [loggedUser, setLoggedUser] = useState<StoredUser | null>(() => {
     const storedUser = localStorage.getItem('user')
+    const storedToken = localStorage.getItem('token')
 
-    if (!storedUser) {
+    if (!storedUser || !storedToken) {
+      localStorage.removeItem('user')
+      localStorage.removeItem('token')
       return null
     }
 
@@ -147,10 +157,76 @@ export default function EnergyDashboardHomepage() {
   const generatedEnergyData = useMemo(() => generateEnergyData(), [])
 
   const [backendEnergyData, setBackendEnergyData] = useState<EnergyPoint[]>([])
-  const [isEnergyDataLoading, setIsEnergyDataLoading] = useState(true)
+  const [availableDevices, setAvailableDevices] = useState<DashboardDevice[]>([])
+  const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null)
+  const [isEnergyDataLoading, setIsEnergyDataLoading] = useState(false)
 
   useEffect(() => {
     if (!isUserLoggedIn) {
+      setAvailableDevices([])
+      setSelectedDeviceId(null)
+      return
+    }
+
+    let isActive = true
+
+    const fetchDevices = async () => {
+      const token = localStorage.getItem('token')
+
+      try {
+        const response = await fetch('/api/devices', {
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : {},
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch devices')
+        }
+
+        const devices = (await response.json()) as DashboardDevice[]
+
+        if (!isActive) {
+          return
+        }
+
+        setAvailableDevices(devices)
+        setSelectedDeviceId(currentDeviceId => {
+          if (
+            currentDeviceId !== null &&
+            devices.some(device => device.id === currentDeviceId)
+          ) {
+            return currentDeviceId
+          }
+
+          return (
+            devices.find(device => device.status === 'CONNECTED')?.id ??
+            devices.find(device => device.enabled)?.id ??
+            devices[0]?.id ??
+            null
+          )
+        })
+      } catch {
+        if (isActive) {
+          setAvailableDevices([])
+          setSelectedDeviceId(null)
+        }
+      }
+    }
+
+    void fetchDevices()
+    const interval = window.setInterval(fetchDevices, 5000)
+
+    return () => {
+      isActive = false
+      window.clearInterval(interval)
+    }
+  }, [isUserLoggedIn])
+
+  useEffect(() => {
+    if (!isUserLoggedIn || selectedDeviceId === null) {
       setBackendEnergyData([])
       setIsEnergyDataLoading(false)
       return
@@ -159,7 +235,15 @@ export default function EnergyDashboardHomepage() {
     setIsEnergyDataLoading(true)
 
     const fetchEnergyData = () => {
-      fetch('/api/energy/points')
+      const token = localStorage.getItem('token')
+
+      fetch(`/api/energy/points?deviceId=${selectedDeviceId}`, {
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : {},
+      })
         .then(response => {
           if (!response.ok) {
             throw new Error('Failed to fetch energy data')
@@ -192,7 +276,7 @@ export default function EnergyDashboardHomepage() {
     return () => {
       window.clearInterval(interval)
     }
-  }, [isUserLoggedIn])
+  }, [isUserLoggedIn, selectedDeviceId])
 
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [selectedRange, setSelectedRange] = useState<Range>('24h')
@@ -945,14 +1029,59 @@ export default function EnergyDashboardHomepage() {
             >
               {activeTopPage === 'statistics' && (
                 <>
-                  <div className="flex flex-col gap-2 mb-6">
-                    <h2 className="text-4xl font-bold">
-                      Statistics
-                    </h2>
+                  <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-2">
+                      <h2 className="text-4xl font-bold">
+                        Statistics
+                      </h2>
 
-                    <p className={mutedTextClasses}>
-                      Resumo geral do consumo energético da aplicação.
-                    </p>
+                      <p className={mutedTextClasses}>
+                        Resumo geral do consumo energético da aplicação.
+                      </p>
+                    </div>
+
+                    {isUserLoggedIn && (
+                      <label className="block w-full sm:w-72">
+                        <span
+                          className={`mb-2 block text-xs font-semibold uppercase tracking-[0.14em] ${mutedTextClasses}`}
+                        >
+                          Device
+                        </span>
+                        <select
+                          value={selectedDeviceId ?? ''}
+                          disabled={availableDevices.length === 0}
+                          onChange={event =>
+                            setSelectedDeviceId(
+                              event.target.value
+                                ? Number(event.target.value)
+                                : null
+                            )
+                          }
+                          className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold outline-none transition ${
+                            isDarkMode
+                              ? 'border-white/10 bg-slate-950 text-white focus:border-blue-500/70'
+                              : 'border-slate-200 bg-white text-slate-950 focus:border-blue-500'
+                          } ${
+                            availableDevices.length === 0
+                              ? 'cursor-not-allowed opacity-60'
+                              : 'cursor-pointer'
+                          }`}
+                        >
+                          {availableDevices.length === 0 ? (
+                            <option value="">No devices configured</option>
+                          ) : (
+                            availableDevices.map(device => (
+                              <option key={device.id} value={device.id}>
+                                {device.name}
+                                {device.status === 'CONNECTED'
+                                  ? ' — connected'
+                                  : ''}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </label>
+                    )}
                   </div>
 
                   <EnergyStatsCards

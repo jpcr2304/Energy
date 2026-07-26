@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,179 +22,379 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @ExtendWith(MockitoExtension.class)
 class EnergyMessageProcessorTest {
 
-    @Mock
-    private EnergyReadingRepository energyReadingRepository;
+  private static final Long DEVICE_ID = 7L;
+  private static final DeviceType DEVICE_TYPE = DeviceType.SHELLY_EM_GEN3;
 
-    private EnergyMessageProcessor processor;
+  @Mock
+  private EnergyReadingRepository energyReadingRepository;
 
-    @BeforeEach
-    void setUp() {
-        processor = new EnergyMessageProcessor(
-                energyReadingRepository,
-                new ObjectMapper());
-    }
+  private EnergyMessageProcessor processor;
 
-    @Test
-    @DisplayName("Instant power MQTT message is persisted correctly")
-    void process_savesInstantPowerReading() throws Exception {
-        String payload = """
-                {
+  @BeforeEach
+  void setUp() {
+    processor = new EnergyMessageProcessor(
+        energyReadingRepository,
+        new ObjectMapper());
+  }
+
+  @Test
+  @DisplayName("Instant power MQTT message is persisted for its device")
+  void process_savesInstantPowerReading() throws Exception {
+    String payload = """
+        {
+          "id": 0,
+          "voltage": 230.5,
+          "current": 2.1,
+          "act_power": 483.8,
+          "aprt_power": 490.0,
+          "pf": 0.98,
+          "freq": 50.0
+        }
+        """;
+
+    boolean recognized = processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/em1:0",
+        payload);
+
+    ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
+
+    verify(energyReadingRepository).save(captor.capture());
+
+    EnergyReading reading = captor.getValue();
+
+    assertThat(reading.getDeviceId()).isEqualTo(DEVICE_ID);
+    assertThat(reading.getTimestamp()).isNotNull();
+    assertThat(reading.getChannelId()).isZero();
+    assertThat(reading.getVoltage()).isEqualTo(230.5);
+    assertThat(reading.getCurrent()).isEqualTo(2.1);
+    assertThat(reading.getActivePower()).isEqualTo(483.8);
+    assertThat(reading.getApparentPower()).isEqualTo(490.0);
+    assertThat(reading.getPowerFactor()).isEqualTo(0.98);
+    assertThat(reading.getFrequency()).isEqualTo(50.0);
+    assertThat(reading.getTotalActEnergyKwh()).isNull();
+    assertThat(recognized).isTrue();
+  }
+
+  @Test
+  @DisplayName("Accumulated energy is converted from Wh to kWh")
+  void process_convertsWhToKwh() throws Exception {
+    String payload = """
+        {
+          "id": 0,
+          "total_act_energy": 12500.0
+        }
+        """;
+
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/em1data:0",
+        payload);
+
+    ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
+
+    verify(energyReadingRepository).save(captor.capture());
+
+    EnergyReading reading = captor.getValue();
+
+    assertThat(reading.getDeviceId()).isEqualTo(DEVICE_ID);
+    assertThat(reading.getTimestamp()).isNotNull();
+    assertThat(reading.getChannelId()).isZero();
+    assertThat(reading.getTotalActEnergyKwh()).isEqualTo(12.5);
+  }
+
+  @Test
+  @DisplayName("Generic MQTT RPC event persists readings from every available channel")
+  void process_savesBothReadingsFromRpcEvent()
+      throws Exception {
+
+    String payload = """
+        {
+          "params": {
+            "em1data:0": {
+              "id": 0,
+              "total_act_energy": 4200.0
+            },
+            "em1data:1": {
+              "id": 1,
+              "total_act_energy": 1800.0
+            },
+            "em1:0": {
+              "voltage": 230.0,
+              "current": 2.0,
+              "act_power": 460.0,
+              "aprt_power": 470.0,
+              "pf": 0.97,
+              "freq": 50.0
+            },
+            "em1:1": {
+              "voltage": 230.0,
+              "current": 0.5,
+              "act_power": 120.0,
+              "aprt_power": 125.0,
+              "pf": 0.96,
+              "freq": 50.0
+            }
+          }
+        }
+        """;
+
+    processor.process(
+        DEVICE_ID,
+        DeviceType.MQTT,
+        Set.of(0, 1),
+        "shelly/events/rpc",
+        payload);
+
+    ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
+
+    verify(energyReadingRepository, times(2))
+        .save(captor.capture());
+
+    List<EnergyReading> readings = captor.getAllValues();
+    EnergyReading accumulatedReading = readings.get(0);
+    EnergyReading instantReading = readings.get(1);
+
+    assertThat(accumulatedReading.getDeviceId())
+        .isEqualTo(DEVICE_ID);
+    assertThat(accumulatedReading.getTotalActEnergyKwh())
+        .isEqualTo(6.0);
+    assertThat(accumulatedReading.getChannelId()).isZero();
+
+    assertThat(instantReading.getDeviceId())
+        .isEqualTo(DEVICE_ID);
+    assertThat(instantReading.getVoltage()).isEqualTo(230.0);
+    assertThat(instantReading.getActivePower()).isEqualTo(580.0);
+    assertThat(instantReading.getChannelId()).isZero();
+  }
+
+  @Test
+  @DisplayName("Shelly RPC event is ignored to avoid duplicate status readings")
+  void process_ignoresShellyRpcEvent() throws Exception {
+    boolean recognized = processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/events/rpc",
+        """
+            {
+              "params": {
+                "em1:0": {
                   "id": 0,
-                  "voltage": 230.5,
-                  "current": 2.1,
-                  "act_power": 483.8,
-                  "aprt_power": 490.0,
-                  "pf": 0.98,
-                  "freq": 50.0
+                  "act_power": 460.0
                 }
-                """;
+              }
+            }
+            """);
 
-        processor.process(
-                "shelly/status/em1:0",
-                payload);
+    verifyNoInteractions(energyReadingRepository);
+    assertThat(recognized).isFalse();
+  }
 
-        ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
+  @Test
+  @DisplayName("Instant power is persisted at most once per 30-second bucket")
+  void process_throttlesInstantPowerPerDeviceAndChannel()
+      throws Exception {
+    String payload = """
+        {
+          "id": 0,
+          "act_power": 483.8
+        }
+        """;
 
-        verify(energyReadingRepository)
-                .save(captor.capture());
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/em1:0",
+        payload);
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/em1:0",
+        payload);
 
-        EnergyReading reading = captor.getValue();
+    verify(energyReadingRepository, times(1))
+        .save(org.mockito.ArgumentMatchers.any());
+  }
 
-        assertThat(reading.getTimestamp()).isNotNull();
-        assertThat(reading.getChannelId()).isZero();
-        assertThat(reading.getVoltage()).isEqualTo(230.5);
-        assertThat(reading.getCurrent()).isEqualTo(2.1);
-        assertThat(reading.getActivePower()).isEqualTo(483.8);
-        assertThat(reading.getApparentPower()).isEqualTo(490.0);
-        assertThat(reading.getPowerFactor()).isEqualTo(0.98);
-        assertThat(reading.getFrequency()).isEqualTo(50.0);
-        assertThat(reading.getTotalActEnergyKwh()).isNull();
-    }
+  @Test
+  @DisplayName("Accumulated energy is persisted at most once per minute bucket")
+  void process_throttlesEnergyPerDeviceAndChannel()
+      throws Exception {
+    String payload = """
+        {
+          "id": 0,
+          "total_act_energy": 12500.0
+        }
+        """;
 
-    @Test
-    @DisplayName("Accumulated energy is converted from Wh to kWh")
-    void process_convertsWhToKwh() throws Exception {
-        String payload = """
-                {
-                  "id": 0,
-                  "total_act_energy": 12500.0
-                }
-                """;
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/em1data:0",
+        payload);
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/em1data:0",
+        payload);
 
-        processor.process(
-                "shelly/status/em1data:0",
-                payload);
+    verify(energyReadingRepository, times(1))
+        .save(org.mockito.ArgumentMatchers.any());
+  }
 
-        ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
+  @Test
+  @DisplayName("Selected channels are stored as one total reading")
+  void process_aggregatesSelectedChannelsIntoOneReading()
+      throws Exception {
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        Set.of(0, 1),
+        "shelly/status/em1:0",
+        """
+            {
+              "id": 0,
+              "act_power": 483.8
+            }
+            """);
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        Set.of(0, 1),
+        "shelly/status/em1:1",
+        """
+            {
+              "id": 1,
+              "act_power": 120.0
+            }
+            """);
 
-        verify(energyReadingRepository)
-                .save(captor.capture());
+    ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
 
-        EnergyReading reading = captor.getValue();
+    verify(energyReadingRepository).save(captor.capture());
 
-        assertThat(reading.getTimestamp()).isNotNull();
-        assertThat(reading.getChannelId()).isZero();
-        assertThat(reading.getTotalActEnergyKwh())
-                .isEqualTo(12.5);
-    }
+    EnergyReading totalReading = captor.getValue();
 
-    @Test
-    @DisplayName("RPC event persists accumulated and instant readings")
-    void process_savesBothReadingsFromRpcEvent()
-            throws Exception {
+    assertThat(totalReading.getChannelId()).isZero();
+    assertThat(totalReading.getActivePower()).isEqualTo(603.8);
+  }
 
-        String payload = """
-                {
-                  "params": {
-                    "em1data:0": {
-                      "id": 0,
-                      "total_act_energy": 4200.0
-                    },
-                    "em1:0": {
-                      "voltage": 230.0,
-                      "current": 2.0,
-                      "act_power": 460.0,
-                      "aprt_power": 470.0,
-                      "pf": 0.97,
-                      "freq": 50.0
-                    }
-                  }
-                }
-                """;
+  @Test
+  @DisplayName("Selected energy channels are stored as one accumulated total")
+  void process_aggregatesSelectedEnergyChannels()
+      throws Exception {
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        Set.of(0, 1),
+        "shelly/status/em1data:0",
+        """
+            {
+              "id": 0,
+              "total_act_energy": 4200.0
+            }
+            """);
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        Set.of(0, 1),
+        "shelly/status/em1data:1",
+        """
+            {
+              "id": 1,
+              "total_act_energy": 1800.0
+            }
+            """);
 
-        processor.process(
-                "shelly/events/rpc",
-                payload);
+    ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
 
-        ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
+    verify(energyReadingRepository).save(captor.capture());
 
-        verify(energyReadingRepository, times(2))
-                .save(captor.capture());
+    EnergyReading totalReading = captor.getValue();
 
-        List<EnergyReading> readings = captor.getAllValues();
+    assertThat(totalReading.getChannelId()).isZero();
+    assertThat(totalReading.getTotalActEnergyKwh())
+        .isEqualTo(6.0);
+  }
 
-        EnergyReading accumulatedReading = readings.get(0);
-        EnergyReading instantReading = readings.get(1);
+  @Test
+  @DisplayName("Channels outside the home total are not persisted")
+  void process_ignoresUnselectedChannels()
+      throws Exception {
+    boolean recognized = processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        Set.of(0),
+        "shelly/status/em1:1",
+        """
+            {
+              "id": 1,
+              "act_power": 120.0
+            }
+            """);
 
-        assertThat(accumulatedReading.getTotalActEnergyKwh())
-                .isEqualTo(4.2);
+    verifyNoInteractions(energyReadingRepository);
+    assertThat(recognized).isTrue();
+  }
 
-        assertThat(instantReading.getVoltage())
-                .isEqualTo(230.0);
+  @Test
+  @DisplayName("Missing optional fields are stored as null")
+  void process_handlesMissingOptionalFields()
+      throws Exception {
 
-        assertThat(instantReading.getActivePower())
-                .isEqualTo(460.0);
-    }
+    String payload = """
+        {
+          "id": 1,
+          "act_power": 420.0
+        }
+        """;
 
-    @Test
-    @DisplayName("Missing optional fields are stored as null")
-    void process_handlesMissingOptionalFields()
-            throws Exception {
+    processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/em1:0",
+        payload);
 
-        String payload = """
-                {
-                  "id": 1,
-                  "act_power": 420.0
-                }
-                """;
+    ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
 
-        processor.process(
-                "shelly/status/em1:0",
-                payload);
+    verify(energyReadingRepository).save(captor.capture());
 
-        ArgumentCaptor<EnergyReading> captor = ArgumentCaptor.forClass(EnergyReading.class);
+    EnergyReading reading = captor.getValue();
 
-        verify(energyReadingRepository)
-                .save(captor.capture());
+    assertThat(reading.getDeviceId()).isEqualTo(DEVICE_ID);
+    assertThat(reading.getChannelId()).isEqualTo(1);
+    assertThat(reading.getActivePower()).isEqualTo(420.0);
+    assertThat(reading.getVoltage()).isNull();
+    assertThat(reading.getCurrent()).isNull();
+    assertThat(reading.getPowerFactor()).isNull();
+    assertThat(reading.getFrequency()).isNull();
+  }
 
-        EnergyReading reading = captor.getValue();
+  @Test
+  @DisplayName("Unknown MQTT topic does not persist data")
+  void process_ignoresUnknownTopic() throws Exception {
+    boolean recognized = processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/unknown",
+        "{}");
 
-        assertThat(reading.getChannelId()).isEqualTo(1);
-        assertThat(reading.getActivePower()).isEqualTo(420.0);
-        assertThat(reading.getVoltage()).isNull();
-        assertThat(reading.getCurrent()).isNull();
-        assertThat(reading.getPowerFactor()).isNull();
-        assertThat(reading.getFrequency()).isNull();
-    }
+    verifyNoInteractions(energyReadingRepository);
+    assertThat(recognized).isFalse();
+  }
 
-    @Test
-    @DisplayName("Unknown MQTT topic does not persist data")
-    void process_ignoresUnknownTopic() throws Exception {
-        processor.process(
-                "shelly/status/unknown",
-                "{}");
+  @Test
+  @DisplayName("Invalid JSON is rejected")
+  void process_rejectsInvalidJson() {
+    assertThatThrownBy(() -> processor.process(
+        DEVICE_ID,
+        DEVICE_TYPE,
+        "shelly/status/em1:0",
+        "{invalid-json"))
+        .isInstanceOf(JsonProcessingException.class);
 
-        verifyNoInteractions(energyReadingRepository);
-    }
-
-    @Test
-    @DisplayName("Invalid JSON is rejected")
-    void process_rejectsInvalidJson() {
-        assertThatThrownBy(() -> processor.process(
-                "shelly/status/em1:0",
-                "{invalid-json"))
-                .isInstanceOf(JsonProcessingException.class);
-
-        verifyNoInteractions(energyReadingRepository);
-    }
+    verifyNoInteractions(energyReadingRepository);
+  }
 }

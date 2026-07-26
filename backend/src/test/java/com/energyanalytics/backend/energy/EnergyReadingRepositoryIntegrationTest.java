@@ -21,94 +21,104 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class EnergyReadingRepositoryIntegrationTest {
 
-    @SuppressWarnings("resource")
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("energy_test")
-            .withUsername("test")
-            .withPassword("test");
+        private static final Long DEVICE_ID = 7L;
 
-    @Autowired
-    private EnergyReadingRepository energyReadingRepository;
+        @SuppressWarnings("resource")
+        @Container
+        @ServiceConnection
+        static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
+                        .withDatabaseName("energy_test")
+                        .withUsername("test")
+                        .withPassword("test");
 
-    @Test
-    @DisplayName("Energy readings are filtered by date and ordered by timestamp")
-    void findByTimestampBetween_returnsFilteredAndOrderedReadings() {
-        Instant start = Instant.parse("2026-07-01T00:00:00Z");
-        Instant end = Instant.parse("2026-07-02T00:00:00Z");
+        @Autowired
+        private EnergyReadingRepository energyReadingRepository;
 
-        EnergyReading outsideRange = EnergyReading.builder()
-                .timestamp(Instant.parse("2026-06-30T23:00:00Z"))
-                .totalActEnergyKwh(9.0)
-                .build();
+        @Test
+        @DisplayName("Energy readings are filtered by date and ordered by timestamp")
+        void findByTimestampBetween_returnsFilteredAndOrderedReadings() {
+                Instant start = Instant.parse("2026-07-01T00:00:00Z");
+                Instant end = Instant.parse("2026-07-02T00:00:00Z");
 
-        EnergyReading secondReading = EnergyReading.builder()
-                .timestamp(Instant.parse("2026-07-01T12:00:00Z"))
-                .totalActEnergyKwh(12.0)
-                .build();
+                EnergyReading outsideRange = EnergyReading.builder()
+                                .deviceId(DEVICE_ID)
+                                .timestamp(Instant.parse("2026-06-30T23:00:00Z"))
+                                .totalActEnergyKwh(9.0)
+                                .build();
 
-        EnergyReading firstReading = EnergyReading.builder()
-                .timestamp(Instant.parse("2026-07-01T10:00:00Z"))
-                .totalActEnergyKwh(10.0)
-                .build();
+                EnergyReading secondReading = EnergyReading.builder()
+                                .deviceId(DEVICE_ID)
+                                .timestamp(Instant.parse("2026-07-01T12:00:00Z"))
+                                .totalActEnergyKwh(12.0)
+                                .build();
 
-        EnergyReading readingWithoutAccumulatedEnergy = EnergyReading.builder()
-                .timestamp(Instant.parse("2026-07-01T11:00:00Z"))
-                .activePower(450.0)
-                .totalActEnergyKwh(null)
-                .build();
+                EnergyReading firstReading = EnergyReading.builder()
+                                .deviceId(DEVICE_ID)
+                                .timestamp(Instant.parse("2026-07-01T10:00:00Z"))
+                                .totalActEnergyKwh(10.0)
+                                .build();
 
-        energyReadingRepository.saveAllAndFlush(List.of(
-                outsideRange,
-                secondReading,
-                firstReading,
-                readingWithoutAccumulatedEnergy));
+                EnergyReading readingWithoutAccumulatedEnergy = EnergyReading.builder()
+                                .deviceId(DEVICE_ID)
+                                .timestamp(Instant.parse("2026-07-01T11:00:00Z"))
+                                .activePower(450.0)
+                                .totalActEnergyKwh(null)
+                                .build();
 
-        List<EnergyReading> result = energyReadingRepository
-                .findByTimestampBetweenAndTotalActEnergyKwhIsNotNullOrderByTimestampAsc(
-                        start,
-                        end);
+                energyReadingRepository.saveAllAndFlush(List.of(
+                                outsideRange,
+                                secondReading,
+                                firstReading,
+                                readingWithoutAccumulatedEnergy));
 
-        assertThat(result).hasSize(2);
+                List<EnergyReading> result = energyReadingRepository
+                                .findByDeviceIdAndTimestampBetweenAndTotalActEnergyKwhIsNotNullOrderByTimestampAsc(
+                                                DEVICE_ID,
+                                                start,
+                                                end);
 
-        assertThat(result)
-                .extracting(EnergyReading::getTimestamp)
-                .containsExactly(
-                        Instant.parse("2026-07-01T10:00:00Z"),
-                        Instant.parse("2026-07-01T12:00:00Z"));
+                assertThat(result).hasSize(2);
 
-        assertThat(result)
-                .extracting(EnergyReading::getTotalActEnergyKwh)
-                .containsExactly(10.0, 12.0);
-    }
+                assertThat(result)
+                                .extracting(EnergyReading::getTimestamp)
+                                .containsExactly(
+                                                Instant.parse("2026-07-01T10:00:00Z"),
+                                                Instant.parse("2026-07-01T12:00:00Z"));
 
-    @Test
-    @DisplayName("The most recent energy reading is returned")
-    void findTopByOrderByTimestampDesc_returnsLatestReading() {
-        EnergyReading olderReading = EnergyReading.builder()
-                .timestamp(Instant.parse("2026-07-12T10:00:00Z"))
-                .voltage(229.0)
-                .activePower(300.0)
-                .build();
+                assertThat(result)
+                                .extracting(EnergyReading::getTotalActEnergyKwh)
+                                .containsExactly(10.0, 12.0);
+        }
 
-        EnergyReading latestReading = EnergyReading.builder()
-                .timestamp(Instant.parse("2026-07-12T12:00:00Z"))
-                .voltage(231.0)
-                .current(2.5)
-                .activePower(577.5)
-                .build();
+        @Test
+        @DisplayName("The most recent energy reading is returned")
+        void findTopByOrderByTimestampDesc_returnsLatestReading() {
+                EnergyReading olderReading = EnergyReading.builder()
+                                .deviceId(DEVICE_ID)
+                                .timestamp(Instant.parse("2026-07-12T10:00:00Z"))
+                                .voltage(229.0)
+                                .activePower(300.0)
+                                .build();
 
-        energyReadingRepository.saveAllAndFlush(
-                List.of(olderReading, latestReading));
+                EnergyReading latestReading = EnergyReading.builder()
+                                .deviceId(DEVICE_ID)
+                                .timestamp(Instant.parse("2026-07-12T12:00:00Z"))
+                                .voltage(231.0)
+                                .current(2.5)
+                                .activePower(577.5)
+                                .build();
 
-        Optional<EnergyReading> result = energyReadingRepository.findTopByOrderByTimestampDesc();
+                energyReadingRepository.saveAllAndFlush(
+                                List.of(olderReading, latestReading));
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getTimestamp())
-                .isEqualTo(Instant.parse("2026-07-12T12:00:00Z"));
-        assertThat(result.get().getVoltage()).isEqualTo(231.0);
-        assertThat(result.get().getCurrent()).isEqualTo(2.5);
-        assertThat(result.get().getActivePower()).isEqualTo(577.5);
-    }
+                Optional<EnergyReading> result = energyReadingRepository
+                                .findTopByDeviceIdOrderByTimestampDesc(DEVICE_ID);
+
+                assertThat(result).isPresent();
+                assertThat(result.get().getTimestamp())
+                                .isEqualTo(Instant.parse("2026-07-12T12:00:00Z"));
+                assertThat(result.get().getVoltage()).isEqualTo(231.0);
+                assertThat(result.get().getCurrent()).isEqualTo(2.5);
+                assertThat(result.get().getActivePower()).isEqualTo(577.5);
+        }
 }

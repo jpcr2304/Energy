@@ -33,8 +33,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/energy_analytics
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
-      MQTT_BROKER_URL: tcp://mosquitto:1883
-      MQTT_TOPIC: shellyemg3-e4b323227cfc/#
+      MQTT_DEFAULT_BROKER_URL: tcp://mosquitto:1883
+      JWT_SECRET: "volt-jwt-development-secret-2026-change-me"
     ports:
       - "8081:8080"
 

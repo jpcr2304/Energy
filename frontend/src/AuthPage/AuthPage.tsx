@@ -64,9 +64,11 @@ export default function AuthPage() {
         throw new Error(message || 'Erro ao autenticar.')
       }
 
-      const user = await response.json()
+      const authResponse = await response.json()
+      const { token, ...user } = authResponse
 
       localStorage.setItem('user', JSON.stringify(user))
+      localStorage.setItem('token', token)
 
       navigate('/home')
     } catch (err) {

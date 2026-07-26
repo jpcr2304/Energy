@@ -1,5 +1,10 @@
 package com.energyanalytics.backend.user;
 
+import com.energyanalytics.backend.energy.DeviceStatus;
+import com.energyanalytics.backend.energy.DeviceType;
+import com.energyanalytics.backend.energy.EnergyDevice;
+import com.energyanalytics.backend.energy.EnergyDeviceRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,55 +24,95 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class UserRepositoryIntegrationTest {
 
-    @SuppressWarnings("resource")
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("energy_test")
-            .withUsername("test")
-            .withPassword("test");
+        @SuppressWarnings("resource")
+        @Container
+        @ServiceConnection
+        static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16-alpine")
+                        .withDatabaseName("energy_test")
+                        .withUsername("test")
+                        .withPassword("test");
 
-    @Autowired
-    private UserRepository userRepository;
+        @Autowired
+        private UserRepository userRepository;
 
-    @Test
-    @DisplayName("User can be found by email after being persisted")
-    void findByEmail_returnsUser_whenUserExists() {
-        User user = User.builder()
-                .name("João Rodrigues")
-                .email("joao@example.com")
-                .password("encoded-password")
-                .build();
+        @Autowired
+        private EnergyDeviceRepository energyDeviceRepository;
 
-        userRepository.save(user);
+        @Autowired
+        private EntityManager entityManager;
 
-        Optional<User> result = userRepository.findByEmail("joao@example.com");
+        @Test
+        @DisplayName("User can be found by email after being persisted")
+        void findByEmail_returnsUser_whenUserExists() {
+                User user = User.builder()
+                                .name("João Rodrigues")
+                                .email("joao@example.com")
+                                .password("encoded-password")
+                                .build();
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getId()).isNotNull();
-        assertThat(result.get().getName())
-                .isEqualTo("João Rodrigues");
-        assertThat(result.get().getEmail())
-                .isEqualTo("joao@example.com");
-        assertThat(result.get().getPassword())
-                .isEqualTo("encoded-password");
-    }
+                userRepository.save(user);
 
-    @Test
-    @DisplayName("Email existence check returns the correct result")
-    void existsByEmail_returnsCorrectResult() {
-        User user = User.builder()
-                .name("João Rodrigues")
-                .email("joao@example.com")
-                .password("encoded-password")
-                .build();
+                Optional<User> result = userRepository.findByEmail("joao@example.com");
 
-        userRepository.save(user);
+                assertThat(result).isPresent();
+                assertThat(result.get().getId()).isNotNull();
+                assertThat(result.get().getName())
+                                .isEqualTo("João Rodrigues");
+                assertThat(result.get().getEmail())
+                                .isEqualTo("joao@example.com");
+                assertThat(result.get().getPassword())
+                                .isEqualTo("encoded-password");
+        }
 
-        assertThat(
-                userRepository.existsByEmail("joao@example.com")).isTrue();
+        @Test
+        @DisplayName("Email existence check returns the correct result")
+        void existsByEmail_returnsCorrectResult() {
+                User user = User.builder()
+                                .name("João Rodrigues")
+                                .email("joao@example.com")
+                                .password("encoded-password")
+                                .build();
 
-        assertThat(
-                userRepository.existsByEmail("unknown@example.com")).isFalse();
-    }
+                userRepository.save(user);
+
+                assertThat(
+                                userRepository.existsByEmail("joao@example.com")).isTrue();
+
+                assertThat(
+                                userRepository.existsByEmail("unknown@example.com")).isFalse();
+        }
+
+        @Test
+        @DisplayName("A user can own multiple energy devices")
+        void userDevices_returnsDevicesOwnedByUser() {
+                User user = User.builder()
+                                .name("João Rodrigues")
+                                .email("joao@example.com")
+                                .password("encoded-password")
+                                .build();
+
+                userRepository.saveAndFlush(user);
+
+                EnergyDevice device = EnergyDevice.builder()
+                                .user(user)
+                                .name("Main energy monitor")
+                                .type(DeviceType.SHELLY_EM_GEN3)
+                                .brokerUrl("tcp://localhost:1883")
+                                .deviceIdentifier("shellyemg3-e4b323227cfc")
+                                .topic("shellyemg3-e4b323227cfc/#")
+                                .enabled(false)
+                                .status(DeviceStatus.DISCONNECTED)
+                                .build();
+
+                energyDeviceRepository.saveAndFlush(device);
+                entityManager.clear();
+
+                User reloadedUser = userRepository
+                                .findByEmail("joao@example.com")
+                                .orElseThrow();
+
+                assertThat(reloadedUser.getDevices())
+                                .extracting(EnergyDevice::getDeviceIdentifier)
+                                .containsExactly("shellyemg3-e4b323227cfc");
+        }
 }

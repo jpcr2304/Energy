@@ -6,6 +6,10 @@ import lombok.*;
 import java.time.Instant;
 
 @Entity
+@Table(name = "energy_reading", indexes = {
+                @Index(name = "idx_energy_reading_device_timestamp", columnList = "device_id,timestamp"),
+                @Index(name = "idx_energy_reading_timestamp", columnList = "timestamp")
+})
 @Getter
 @Setter
 @Builder
@@ -13,25 +17,29 @@ import java.time.Instant;
 @AllArgsConstructor
 public class EnergyReading {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+        @Id
+        @GeneratedValue(strategy = GenerationType.IDENTITY)
+        private Long id;
 
-    private Instant timestamp;
+        @Column(name = "device_id")
+        private Long deviceId;
 
-    private Integer channelId;
+        @Column(nullable = false)
+        private Instant timestamp;
 
-    private Double voltage;
+        private Integer channelId;
 
-    private Double current;
+        private Double voltage;
 
-    private Double activePower;
+        private Double current;
 
-    private Double apparentPower;
+        private Double activePower;
 
-    private Double powerFactor;
+        private Double apparentPower;
 
-    private Double frequency;
+        private Double powerFactor;
 
-    private Double totalActEnergyKwh;
+        private Double frequency;
+
+        private Double totalActEnergyKwh;
 }

@@ -1,7 +1,8 @@
 package com.energyanalytics.backend.auth;
 
 public record AuthResponse(
-        Long id,
-        String name,
-        String email) {
+                Long id,
+                String name,
+                String email,
+                String token) {
 }

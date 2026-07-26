@@ -31,164 +31,178 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
-    @Mock
-    private UserRepository userRepository;
+        @Mock
+        private UserRepository userRepository;
 
-    @Mock
-    private PasswordEncoder passwordEncoder;
+        @Mock
+        private PasswordEncoder passwordEncoder;
 
-    private MockMvc mockMvc;
-    private ObjectMapper objectMapper;
+        @Mock
+        private JwtService jwtService;
 
-    @BeforeEach
-    void setUp() {
-        AuthController authController = new AuthController(userRepository, passwordEncoder);
+        private MockMvc mockMvc;
+        private ObjectMapper objectMapper;
 
-        mockMvc = MockMvcBuilders
-                .standaloneSetup(authController)
-                .build();
+        @BeforeEach
+        void setUp() {
+                AuthController authController = new AuthController(
+                                userRepository,
+                                passwordEncoder,
+                                jwtService);
 
-        objectMapper = new ObjectMapper();
-    }
+                mockMvc = MockMvcBuilders
+                                .standaloneSetup(authController)
+                                .build();
 
-    @Test
-    @DisplayName("Registration succeeds when email is available")
-    void register_returnsUser_whenEmailIsAvailable() throws Exception {
-        RegisterRequest request = new RegisterRequest(
-                "João Rodrigues",
-                "joao@example.com",
-                "password123");
+                objectMapper = new ObjectMapper();
+        }
 
-        when(userRepository.existsByEmail("joao@example.com"))
-                .thenReturn(false);
+        @Test
+        @DisplayName("Registration succeeds when email is available")
+        void register_returnsUser_whenEmailIsAvailable() throws Exception {
+                RegisterRequest request = new RegisterRequest(
+                                "João Rodrigues",
+                                "joao@example.com",
+                                "password123");
 
-        when(passwordEncoder.encode("password123"))
-                .thenReturn("encoded-password");
+                when(userRepository.existsByEmail("joao@example.com"))
+                                .thenReturn(false);
 
-        when(userRepository.save(any(User.class)))
-                .thenAnswer(invocation -> {
-                    User savedUser = invocation.getArgument(0);
-                    savedUser.setId(1L);
-                    return savedUser;
-                });
+                when(passwordEncoder.encode("password123"))
+                                .thenReturn("encoded-password");
 
-        mockMvc.perform(post("/api/auth/register")
-                .contentType(APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.name").value("João Rodrigues"))
-                .andExpect(jsonPath("$.email").value("joao@example.com"))
-                .andExpect(jsonPath("$.password").doesNotExist());
+                when(userRepository.save(any(User.class)))
+                                .thenAnswer(invocation -> {
+                                        User savedUser = invocation.getArgument(0);
+                                        savedUser.setId(1L);
+                                        return savedUser;
+                                });
 
-        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+                when(jwtService.createToken(any(User.class)))
+                                .thenReturn("test-jwt");
 
-        verify(userRepository).save(userCaptor.capture());
+                mockMvc.perform(post("/api/auth/register")
+                                .contentType(APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.id").value(1))
+                                .andExpect(jsonPath("$.name").value("João Rodrigues"))
+                                .andExpect(jsonPath("$.email").value("joao@example.com"))
+                                .andExpect(jsonPath("$.token").value("test-jwt"))
+                                .andExpect(jsonPath("$.password").doesNotExist());
 
-        User savedUser = userCaptor.getValue();
+                ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
 
-        assertThat(savedUser.getName()).isEqualTo("João Rodrigues");
-        assertThat(savedUser.getEmail()).isEqualTo("joao@example.com");
-        assertThat(savedUser.getPassword()).isEqualTo("encoded-password");
-    }
+                verify(userRepository).save(userCaptor.capture());
 
-    @Test
-    @DisplayName("Registration fails when email is already in use")
-    void register_returnsBadRequest_whenEmailAlreadyExists() throws Exception {
-        RegisterRequest request = new RegisterRequest(
-                "João Rodrigues",
-                "joao@example.com",
-                "password123");
+                User savedUser = userCaptor.getValue();
 
-        when(userRepository.existsByEmail("joao@example.com"))
-                .thenReturn(true);
+                assertThat(savedUser.getName()).isEqualTo("João Rodrigues");
+                assertThat(savedUser.getEmail()).isEqualTo("joao@example.com");
+                assertThat(savedUser.getPassword()).isEqualTo("encoded-password");
+        }
 
-        mockMvc.perform(post("/api/auth/register")
-                .contentType(APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string("Email already in use"));
+        @Test
+        @DisplayName("Registration fails when email is already in use")
+        void register_returnsBadRequest_whenEmailAlreadyExists() throws Exception {
+                RegisterRequest request = new RegisterRequest(
+                                "João Rodrigues",
+                                "joao@example.com",
+                                "password123");
 
-        verify(userRepository, never()).save(any(User.class));
-        verify(passwordEncoder, never()).encode(anyString());
-    }
+                when(userRepository.existsByEmail("joao@example.com"))
+                                .thenReturn(true);
 
-    @Test
-    @DisplayName("Login succeeds with correct credentials")
-    void login_returnsUser_whenCredentialsAreCorrect() throws Exception {
-        LoginRequest request = new LoginRequest(
-                "joao@example.com",
-                "password123");
+                mockMvc.perform(post("/api/auth/register")
+                                .contentType(APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(content().string("Email already in use"));
 
-        User user = User.builder()
-                .id(1L)
-                .name("João Rodrigues")
-                .email("joao@example.com")
-                .password("encoded-password")
-                .build();
+                verify(userRepository, never()).save(any(User.class));
+                verify(passwordEncoder, never()).encode(anyString());
+        }
 
-        when(userRepository.findByEmail("joao@example.com"))
-                .thenReturn(Optional.of(user));
+        @Test
+        @DisplayName("Login succeeds with correct credentials")
+        void login_returnsUser_whenCredentialsAreCorrect() throws Exception {
+                LoginRequest request = new LoginRequest(
+                                "joao@example.com",
+                                "password123");
 
-        when(passwordEncoder.matches(
-                "password123",
-                "encoded-password")).thenReturn(true);
+                User user = User.builder()
+                                .id(1L)
+                                .name("João Rodrigues")
+                                .email("joao@example.com")
+                                .password("encoded-password")
+                                .build();
 
-        mockMvc.perform(post("/api/auth/login")
-                .contentType(APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.name").value("João Rodrigues"))
-                .andExpect(jsonPath("$.email").value("joao@example.com"))
-                .andExpect(jsonPath("$.password").doesNotExist());
-    }
+                when(userRepository.findByEmail("joao@example.com"))
+                                .thenReturn(Optional.of(user));
 
-    @Test
-    @DisplayName("Login fails with incorrect password")
-    void login_returnsBadRequest_whenPasswordIsIncorrect() throws Exception {
-        LoginRequest request = new LoginRequest(
-                "joao@example.com",
-                "wrong-password");
+                when(passwordEncoder.matches(
+                                "password123",
+                                "encoded-password")).thenReturn(true);
 
-        User user = User.builder()
-                .id(1L)
-                .name("João Rodrigues")
-                .email("joao@example.com")
-                .password("encoded-password")
-                .build();
+                when(jwtService.createToken(user))
+                                .thenReturn("test-jwt");
 
-        when(userRepository.findByEmail("joao@example.com"))
-                .thenReturn(Optional.of(user));
+                mockMvc.perform(post("/api/auth/login")
+                                .contentType(APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.id").value(1))
+                                .andExpect(jsonPath("$.name").value("João Rodrigues"))
+                                .andExpect(jsonPath("$.email").value("joao@example.com"))
+                                .andExpect(jsonPath("$.token").value("test-jwt"))
+                                .andExpect(jsonPath("$.password").doesNotExist());
+        }
 
-        when(passwordEncoder.matches(
-                "wrong-password",
-                "encoded-password")).thenReturn(false);
+        @Test
+        @DisplayName("Login fails with incorrect password")
+        void login_returnsBadRequest_whenPasswordIsIncorrect() throws Exception {
+                LoginRequest request = new LoginRequest(
+                                "joao@example.com",
+                                "wrong-password");
 
-        mockMvc.perform(post("/api/auth/login")
-                .contentType(APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string("Invalid credentials"));
-    }
+                User user = User.builder()
+                                .id(1L)
+                                .name("João Rodrigues")
+                                .email("joao@example.com")
+                                .password("encoded-password")
+                                .build();
 
-    @Test
-    @DisplayName("Login fails when user does not exist")
-    void login_returnsBadRequest_whenUserDoesNotExist() throws Exception {
-        LoginRequest request = new LoginRequest(
-                "unknown@example.com",
-                "password123");
+                when(userRepository.findByEmail("joao@example.com"))
+                                .thenReturn(Optional.of(user));
 
-        when(userRepository.findByEmail("unknown@example.com"))
-                .thenReturn(Optional.empty());
+                when(passwordEncoder.matches(
+                                "wrong-password",
+                                "encoded-password")).thenReturn(false);
 
-        mockMvc.perform(post("/api/auth/login")
-                .contentType(APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string("Invalid credentials"));
+                mockMvc.perform(post("/api/auth/login")
+                                .contentType(APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(content().string("Invalid credentials"));
+        }
 
-        verify(passwordEncoder, never())
-                .matches(anyString(), anyString());
-    }
+        @Test
+        @DisplayName("Login fails when user does not exist")
+        void login_returnsBadRequest_whenUserDoesNotExist() throws Exception {
+                LoginRequest request = new LoginRequest(
+                                "unknown@example.com",
+                                "password123");
+
+                when(userRepository.findByEmail("unknown@example.com"))
+                                .thenReturn(Optional.empty());
+
+                mockMvc.perform(post("/api/auth/login")
+                                .contentType(APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(content().string("Invalid credentials"));
+
+                verify(passwordEncoder, never())
+                                .matches(anyString(), anyString());
+        }
 }

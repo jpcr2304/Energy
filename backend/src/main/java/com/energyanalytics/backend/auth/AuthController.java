@@ -13,37 +13,57 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "http://localhost:5173")
 public class AuthController {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
+        private final UserRepository userRepository;
+        private final PasswordEncoder passwordEncoder;
+        private final JwtService jwtService;
 
-    @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            return ResponseEntity.badRequest().body("Email already in use");
+        @PostMapping("/register")
+        public ResponseEntity<?> register(
+                        @RequestBody RegisterRequest request) {
+
+                if (userRepository.existsByEmail(request.email())) {
+                        return ResponseEntity
+                                        .badRequest()
+                                        .body("Email already in use");
+                }
+
+                User user = User.builder()
+                                .name(request.name().trim())
+                                .email(request.email().trim().toLowerCase())
+                                .password(passwordEncoder.encode(request.password()))
+                                .build();
+
+                userRepository.save(user);
+
+                return ResponseEntity.ok(toResponse(user));
         }
 
-        User user = User.builder()
-                .name(request.name())
-                .email(request.email())
-                .password(passwordEncoder.encode(request.password()))
-                .build();
+        @PostMapping("/login")
+        public ResponseEntity<?> login(
+                        @RequestBody LoginRequest request) {
 
-        userRepository.save(user);
+                String email = request.email().trim().toLowerCase();
 
-        return ResponseEntity.ok(
-                new AuthResponse(user.getId(), user.getName(), user.getEmail()));
-    }
+                User user = userRepository.findByEmail(email)
+                                .orElse(null);
 
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        User user = userRepository.findByEmail(request.email())
-                .orElse(null);
+                if (user == null
+                                || !passwordEncoder.matches(
+                                                request.password(),
+                                                user.getPassword())) {
+                        return ResponseEntity
+                                        .badRequest()
+                                        .body("Invalid credentials");
+                }
 
-        if (user == null || !passwordEncoder.matches(request.password(), user.getPassword())) {
-            return ResponseEntity.badRequest().body("Invalid credentials");
+                return ResponseEntity.ok(toResponse(user));
         }
 
-        return ResponseEntity.ok(
-                new AuthResponse(user.getId(), user.getName(), user.getEmail()));
-    }
+        private AuthResponse toResponse(User user) {
+                return new AuthResponse(
+                                user.getId(),
+                                user.getName(),
+                                user.getEmail(),
+                                jwtService.createToken(user));
+        }
 }

@@ -97,24 +97,8 @@ export default function TemporalEnergyChart({
         customEndDate
       )
 
-    const shouldShowFull24Hours = selectedRange === '24h'
-
-    if (!shouldShowFull24Hours && filteredData.length < 2) {
-      return [
-        {
-          id: 'Energia',
-          data: [],
-        },
-      ]
-    }
-
-    const startTime = shouldShowFull24Hours
-      ? selectedStart.getTime()
-      : filteredData[0].timestamp.getTime()
-
-    const endTime = shouldShowFull24Hours
-      ? selectedEnd.getTime()
-      : filteredData[filteredData.length - 1].timestamp.getTime()
+    const startTime = selectedStart.getTime()
+    const endTime = selectedEnd.getTime()
 
     if (
       !Number.isFinite(startTime) ||
@@ -148,7 +132,9 @@ export default function TemporalEnergyChart({
       const pointsInsideInterval = filteredData.filter(
         item =>
           item.timestamp >= intervalStart &&
-          item.timestamp <= intervalEnd
+          (index === 23
+            ? item.timestamp <= intervalEnd
+            : item.timestamp < intervalEnd)
       )
 
       const startLabel =
